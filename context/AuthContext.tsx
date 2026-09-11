@@ -83,6 +83,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .update({ auth_user_id: authUser.id })
             .eq('id', emailMatch.id);
           data = { ...emailMatch, auth_user_id: authUser.id };
+        } else {
+          const fallbackName = (authUser.user_metadata?.full_name as string) || authUser.email.split('@')[0];
+          const newProfile = {
+            auth_user_id: authUser.id,
+            name: fallbackName,
+            email: authUser.email,
+            initials: fallbackName.slice(0, 2).toUpperCase(),
+            role: 'Team Member',
+            is_team_leader: false,
+          };
+          const { data: inserted } = await supabase
+            .from('profiles')
+            .insert(newProfile)
+            .select()
+            .single();
+          data = inserted || newProfile;
         }
       }
 
@@ -176,10 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     clearError();
 
-    // Verify Secret Key (676767)
+    // Verify Secret Key
     if (secretKey.trim() !== TEAM_SECRET_KEY) {
       return {
-        error: new Error('Invalid Secret Key. You must enter the correct 6-digit registration key (676767).'),
+        error: new Error('Invalid Secret Key. Please check with your team coordinator.'),
       };
     }
 

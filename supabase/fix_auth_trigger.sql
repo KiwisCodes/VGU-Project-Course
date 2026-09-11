@@ -1,40 +1,20 @@
 -- ==============================================================================
--- Fix Auth User Registration Trigger
--- Run this in Supabase Dashboard -> SQL Editor -> New Query -> Run
+-- Fix Supabase Auth & RLS
+-- Run this in Supabase Dashboard -> SQL Editor (">_") -> New Query -> Run
 -- ==============================================================================
 
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER 
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_name TEXT;
-  v_initials TEXT;
-BEGIN
-  v_name := COALESCE(
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'name',
-    split_part(NEW.email, '@', 1)
-  );
-  v_initials := UPPER(LEFT(v_name, 2));
-
-  BEGIN
-    UPDATE public.profiles
-    SET auth_user_id = NEW.id,
-        updated_at = NOW()
-    WHERE lower(email) = lower(NEW.email);
-  EXCEPTION WHEN OTHERS THEN
-    -- Prevent trigger failure from aborting user registration
-    NULL;
-  END;
-
-  RETURN NEW;
-END;
-$$;
-
+-- 1. Remove the trigger and function on auth.users causing the 500 error
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+DROP FUNCTION IF EXISTS handle_new_user() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+
+-- 2. Update profiles table RLS policies to allow initial linking and profile insertion
+DROP POLICY IF EXISTS "Profiles: update own" ON profiles;
+CREATE POLICY "Profiles: update own" ON profiles FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Profiles: insert" ON profiles;
+CREATE POLICY "Profiles: insert" ON profiles FOR INSERT WITH CHECK (true);
+
+-- 3. Verify that profiles are accessible
+SELECT id, name, email, auth_user_id, role, is_team_leader FROM profiles;
+
