@@ -12,6 +12,7 @@ import {
   Zap, 
   GripVertical 
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -38,6 +39,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   activeAssigneeFilter,
   onUpdateMemberTaskStatus
 }) => {
+  const { profile, canEditTaskStatus } = useAuth();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
@@ -81,6 +83,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!task) return;
 
     if (targetMemberId && onUpdateMemberTaskStatus) {
+      if (profile && !canEditTaskStatus(targetMemberId)) {
+        const targetMember = members.find(m => m.id === targetMemberId);
+        alert(`Access restriction: Only ${targetMember?.name || 'this member'} (or Team Leader) can modify their personal deliverable board.`);
+        setDraggedTaskId(null);
+        return;
+      }
       const currentMemberStatus = getTaskMemberStatus(task, targetMemberId);
       if (currentMemberStatus !== targetStatus) {
         onUpdateMemberTaskStatus(task.id, targetMemberId, targetStatus);
@@ -297,6 +305,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                 title={`${member.name}: ${isDone ? 'Done (Click to mark In Progress)' : 'In Progress (Click to mark Done)'}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (profile && !canEditTaskStatus(mId)) {
+                                    alert(`Access restriction: Only ${member.name} (or Team Leader) can mark their own progress.`);
+                                    return;
+                                  }
                                   if (onUpdateMemberTaskStatus) {
                                     onUpdateMemberTaskStatus(task.id, mId, isDone ? 'In Progress' : 'Done');
                                   }

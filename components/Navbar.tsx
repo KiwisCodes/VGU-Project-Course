@@ -17,7 +17,8 @@ import {
   User as UserIcon,
   LogOut,
   Settings,
-  LogIn
+  LogIn,
+  Lock
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -75,6 +76,7 @@ export const Navbar: React.FC = () => {
             {navLinks.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+              const isLocked = !user && link.href !== '/';
               return (
                 <Link
                   key={link.href}
@@ -91,6 +93,7 @@ export const Navbar: React.FC = () => {
                 >
                   <Icon className="w-3.5 h-3.5" />
                   <span>{link.label}</span>
+                  {isLocked && <Lock className="w-2.5 h-2.5 opacity-50 ml-0.5" />}
                 </Link>
               );
             })}
@@ -269,6 +272,7 @@ export const Navbar: React.FC = () => {
         {navLinks.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+          const isLocked = !user && link.href !== '/';
           return (
             <Link
               key={link.href}
@@ -278,7 +282,12 @@ export const Navbar: React.FC = () => {
                 color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)'
               }}
             >
-              <Icon className="w-4 h-4" />
+              <div className="relative">
+                <Icon className="w-4 h-4" />
+                {isLocked && (
+                  <span className="absolute -top-1 -right-1.5 text-[8px]">🔒</span>
+                )}
+              </div>
               <span className="text-[10px]">{link.label}</span>
             </Link>
           );

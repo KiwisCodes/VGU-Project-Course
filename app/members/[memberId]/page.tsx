@@ -4,6 +4,7 @@ import React, { useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
@@ -52,6 +53,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     deleteTask,
     setMemberTaskStatus
   } = useProject();
+  const { canEditNote } = useAuth();
 
   const member = members.find(m => m.id === unwrappedParams.memberId);
 
@@ -602,30 +604,38 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                     ✓ Saved to Project Storage!
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={handleSaveNote}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all cursor-pointer"
-                  style={{ backgroundColor: 'var(--accent-purple)' }}
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Lecture {activeNoteLecture} Notes</span>
-                </button>
+                {canEditNote(member.id) ? (
+                  <button
+                    type="button"
+                    onClick={handleSaveNote}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all cursor-pointer"
+                    style={{ backgroundColor: 'var(--accent-purple)' }}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Lecture {activeNoteLecture} Notes</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                    <span>🔒</span>
+                    <span>Read-Only Log</span>
+                  </span>
+                )}
               </div>
             </div>
 
             <textarea
               rows={7}
               value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
-              placeholder={`Log your accomplishments, technical progress, and blockers for Lecture ${activeNoteLecture}:
+              onChange={(e) => canEditNote(member.id) && setNoteContent(e.target.value)}
+              readOnly={!canEditNote(member.id)}
+              placeholder={canEditNote(member.id) ? `Log your accomplishments, technical progress, and blockers for Lecture ${activeNoteLecture}:
 - MultiCaRe dataset extraction and clinical notes normalization
 - Vision-language inference benchmarking (LLaVA / Gemma-2-Vision)
 - RAG vector retrieval experiments and Knowledge Graph construction
 - Multi-agent debate workflow verification
 
-Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:`}
-              className="w-full p-3.5 rounded-xl text-xs border focus:outline-none focus:ring-1 leading-relaxed font-sans"
+Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logged by ${member.name} for Lecture ${activeNoteLecture} yet.`}
+              className={`w-full p-3.5 rounded-xl text-xs border focus:outline-none focus:ring-1 leading-relaxed font-sans ${!canEditNote(member.id) ? 'opacity-80 bg-slate-50 dark:bg-slate-900/60 cursor-default' : ''}`}
               style={{
                 backgroundColor: 'var(--bg-surface-elevated)',
                 borderColor: 'var(--border-strong)',

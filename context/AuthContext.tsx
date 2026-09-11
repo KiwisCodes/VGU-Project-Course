@@ -24,19 +24,21 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isConfigured: boolean;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
-  signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUpWithEmail: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
+  signInWithPassword: (usernameOrEmail: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (email: string, password: string, name: string, secretKey: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ error: Error | null }>;
   isTeamLeader: boolean;
   errorMessage: string | null;
   clearError: () => void;
+  canEditNote: (targetMemberId: string) => boolean;
+  canEditTaskStatus: (targetMemberId: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const VGU_EMAIL_DOMAIN = '@student.vgu.edu.vn';
+export const VGU_EMAIL_DOMAIN = '@student.vgu.edu.vn';
+export const TEAM_SECRET_KEY = '676767';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -132,38 +134,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signInWithGoogle = async () => {
-    if (!isSupabaseConfigured) {
-      return { error: new Error('Supabase is not configured.') };
-    }
-    try {
-      clearError();
-      const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          queryParams: {
-            hd: 'student.vgu.edu.vn',
-            prompt: 'select_account',
-          },
-        },
-      });
-      return { error: error ? new Error(error.message) : null };
-    } catch (err: any) {
-      return { error: err instanceof Error ? err : new Error(String(err)) };
-    }
-  };
-
-  const signInWithPassword = async (email: string, password: string) => {
+  const signInWithPassword = async (usernameOrEmail: string, password: string) => {
     if (!isSupabaseConfigured) {
       return { error: new Error('Supabase is not configured.') };
     }
     clearError();
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
-      return { error: new Error(`Access restricted: Please use your official VGU student email (${VGU_EMAIL_DOMAIN}).`) };
+    let cleanEmail = usernameOrEmail.trim().toLowerCase();
+    // Allow typing student ID (e.g. 10423057) or full email
+    if (!cleanEmail.includes('@')) {
+      cleanEmail = `${cleanEmail}${VGU_EMAIL_DOMAIN}`;
     }
+
+    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
+      return { error: new Error(`Access restricted: Please use your official VGU student account (${VGU_EMAIL_DOMAIN}).`) };
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
@@ -180,15 +165,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string, name: string) => {
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    name: string,
+    secretKey: string
+  ) => {
     if (!isSupabaseConfigured) {
       return { error: new Error('Supabase is not configured.') };
     }
     clearError();
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
-      return { error: new Error(`Access restricted: Please use your official VGU student email (${VGU_EMAIL_DOMAIN}).`) };
+
+    // Verify Secret Key (676767)
+    if (secretKey.trim() !== TEAM_SECRET_KEY) {
+      return {
+        error: new Error('Invalid Secret Key. You must enter the correct 6-digit registration key (676767).'),
+      };
     }
+
+    let cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@')) {
+      cleanEmail = `${cleanEmail}${VGU_EMAIL_DOMAIN}`;
+    }
+
+    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
+      return {
+        error: new Error(`Access restricted: Only official VGU student emails (${VGU_EMAIL_DOMAIN}) are allowed.`),
+      };
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
@@ -243,6 +248,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isTeamLeader = Boolean(profile?.is_team_leader);
 
+  // Permission helper: only the author or team leader can edit a note
+  const canEditNote = (targetMemberId: string): boolean => {
+    if (!profile) return false;
+    return profile.id === targetMemberId || profile.is_team_leader;
+  };
+
+  // Permission helper: only the assignee or team leader can change their own progress
+  const canEditTaskStatus = (targetMemberId: string): boolean => {
+    if (!profile) return false;
+    return profile.id === targetMemberId || profile.is_team_leader;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -250,7 +267,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         loading,
         isConfigured: isSupabaseConfigured,
-        signInWithGoogle,
         signInWithPassword,
         signUpWithEmail,
         signOut,
@@ -258,6 +274,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isTeamLeader,
         errorMessage,
         clearError,
+        canEditNote,
+        canEditTaskStatus,
       }}
     >
       {children}

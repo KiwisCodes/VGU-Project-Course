@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { Member, getMemberShortName, isTaskDoneForMember } from '@/types';
 import { 
   Users, 
@@ -43,6 +44,7 @@ export default function MembersPage() {
     getMemberLectureNote, 
     setMemberLectureNote 
   } = useProject();
+  const { canEditNote, isTeamLeader } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
@@ -317,7 +319,7 @@ export default function MembersPage() {
                     >
                       <Edit3 className="w-3.5 h-3.5 text-muted" />
                     </button>
-                    {members.length > 1 && (
+                    {isTeamLeader && members.length > 1 && (
                       <button
                         onClick={() => {
                           if (confirm(`Remove member "${member.name}"? Tasks assigned to them will be unassigned.`)) {
@@ -598,18 +600,25 @@ export default function MembersPage() {
 
                 {/* Bottom Actions */}
                 <div className="pt-3 border-t mt-4 flex items-center justify-between gap-2 text-xs" style={{ borderColor: 'var(--border-subtle)' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingNoteMemberId(member.id);
-                      setEditingNoteText(note);
-                    }}
-                    className="inline-flex items-center gap-1 font-bold text-xs hover:underline cursor-pointer"
-                    style={{ color: 'var(--accent-purple)' }}
-                  >
-                    <Edit3 className="w-3 h-3" />
-                    <span>{hasNote ? 'Edit Note' : '+ Write Note'}</span>
-                  </button>
+                  {canEditNote(member.id) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingNoteMemberId(member.id);
+                        setEditingNoteText(note);
+                      }}
+                      className="inline-flex items-center gap-1 font-bold text-xs hover:underline cursor-pointer"
+                      style={{ color: 'var(--accent-purple)' }}
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>{hasNote ? 'Edit Note' : '+ Write Note'}</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                      <span>🔒</span>
+                      <span>Read-only</span>
+                    </span>
+                  )}
 
                   <Link
                     href={`/members/${member.id}`}
