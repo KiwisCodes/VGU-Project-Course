@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lecture 01 Dossier: Small Multimodal Models for Clinical Diagnosis</title>
+  <script>
+    // Force immediate default to light mode on initial load
+    localStorage.removeItem('vgu_lecture_theme');
+    localStorage.removeItem('vgu_lecture_theme_preference');
+    document.documentElement.setAttribute('data-theme', 'light');
+  </script>
+  <style>
+    :root {
+      /* Light Mode (Default): Clean, Bright, High-Contrast */
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-surface-elevated: #f1f5f9;
+      --bg-surface-subtle: #f8fafc;
+      --text-main: #0f172a;
+      --text-muted: #334155;
+      --text-faint: #64748b;
+      --border-subtle: rgba(15, 23, 42, 0.1);
+      --border-strong: rgba(15, 23, 42, 0.22);
+
+      /* Vibrant Domain Accents in Light Mode */
+      --accent-blue: #1d4ed8;
+      --accent-blue-soft: #dbeafe;
+      --accent-emerald: #047857;
+      --accent-emerald-soft: #d1fae5;
+      --accent-purple: #6d28d9;
+      --accent-purple-soft: #ede9fe;
+      --accent-amber: #b45309;
+      --accent-amber-soft: #fef3c7;
+      --accent-rose: #be123c;
+      --accent-rose-soft: #ffe4e6;
+      --accent-cyan: #0e7490;
+      --accent-cyan-soft: #cffafe;
+
+      --card-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 10px 25px -5px rgba(15, 23, 42, 0.06);
+      --card-shadow-hover: 0 14px 35px -5px rgba(15, 23, 42, 0.12);
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    [data-theme="dark"] {
+      /* Dark Mode: Pure OLED Pitch Black (#000000), Razor Contrast */
+      --bg-page: #000000;
+      --bg-surface: #0a0a0d;
+      --bg-surface-elevated: #121217;
+      --bg-surface-subtle: #17171f;
+      --text-main: #ffffff;
+      --text-muted: #e2e8f0;
+      --text-faint: #94a3b8;
+      --border-subtle: rgba(255, 255, 255, 0.16);
+      --border-strong: rgba(255, 255, 255, 0.38);
+
+      /* Razor-Sharp Neon Accents in Dark Mode */
+      --accent-blue: #38bdf8;
+      --accent-blue-soft: rgba(56, 189, 248, 0.18);
+      --accent-emerald: #34d399;
+      --accent-emerald-soft: rgba(52, 211, 153, 0.18);
+      --accent-purple: #c084fc;
+      --accent-purple-soft: rgba(192, 132, 252, 0.18);
+      --accent-amber: #fbbf24;
+      --accent-amber-soft: rgba(251, 191, 36, 0.18);
+      --accent-rose: #fb7185;
+      --accent-rose-soft: rgba(251, 113, 133, 0.18);
+      --accent-cyan: #22d3ee;
+      --accent-cyan-soft: rgba(34, 211, 238, 0.18);
+
+      --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 30px rgba(0, 0, 0, 0.95);
+      --card-shadow-hover: 0 0 0 1px var(--accent-blue), 0 14px 40px rgba(0, 0, 0, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.55;
+      min-height: 100dvh;
+      padding: 2rem 1.25rem 4.5rem;
+      display: flex;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 1180px;
+    }
+
+    /* Navigation Bar */
+    .nav-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .brand-mark {
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Segmented Theme Switcher */
+    .theme-segmented {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: 9999px;
+      padding: 0.2rem;
+      gap: 0.2rem;
+    }
+
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .theme-btn:hover {
+      color: var(--text-main);
+    }
+
+    .theme-btn.active {
+      background: var(--bg-surface);
+      color: var(--accent-blue);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    [data-theme="dark"] .theme-btn.active {
+      background: #1e1e28;
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.25);
+    }
+
+    /* Hero Section */
+    .hero {
+      margin-bottom: 2.75rem;
+    }
+
+    .pills-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .pill {
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 0.28rem 0.75rem;
+      border-radius: 9999px;
+      letter-spacing: 0.02em;
+    }
+
+    .pill-blue { background: var(--accent-blue-soft); color: var(--accent-blue); }
+    .pill-emerald { background: var(--accent-emerald-soft); color: var(--accent-emerald); }
+    .pill-purple { background: var(--accent-purple-soft); color: var(--accent-purple); }
+    .pill-amber { background: var(--accent-amber-soft); color: var(--accent-amber); }
+
+    .hero-title {
+      font-size: clamp(2.1rem, 4vw, 2.85rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero-desc {
+      font-size: 1.12rem;
+      color: var(--text-muted);
+      max-width: 840px;
+      line-height: 1.6;
+    }
+
+    /* Bento Grid */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 2.75rem;
+    }
+
+    .bento-cell {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: var(--card-shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento-cell:hover {
+      box-shadow: var(--card-shadow-hover);
+      border-color: var(--border-strong);
+    }
+
+    .col-span-12 { grid-column: span 12; }
+    .col-span-8 { grid-column: span 8; }
+    .col-span-6 { grid-column: span 6; }
+    .col-span-4 { grid-column: span 4; }
+
+    @media (max-width: 900px) {
+      .col-span-8, .col-span-6, .col-span-4 {
+        grid-column: span 12;
+      }
+    }
+
+    .accent-strip {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .strip-blue { background: var(--accent-blue); }
+    .strip-emerald { background: var(--accent-emerald); }
+    .strip-purple { background: var(--accent-purple); }
+    .strip-amber { background: var(--accent-amber); }
+
+    .cell-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+
+    .cell-tag {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+    }
+
+    .cell-title {
+      font-size: 1.24rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.35rem;
+    }
+
+    .cell-body {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.88rem;
+      margin-top: 0.5rem;
+      color: var(--text-main);
+    }
+
+    .contact-link {
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .contact-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Section Headings */
+    .section-head {
+      margin-bottom: 1.25rem;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-subtitle {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* The Three Tiers */
+    .tiers-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 2.75rem;
+    }
+
+    @media (max-width: 850px) {
+      .tiers-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .tier-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .tier-card:hover {
+      box-shadow: var(--card-shadow-hover);
+      border-color: var(--border-strong);
+    }
+
+    .tier-badge {
+      display: inline-block;
+      font-size: 0.74rem;
+      font-weight: 800;
+      padding: 0.25rem 0.65rem;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+    }
+
+    .tier-badge-blue { background: var(--accent-blue-soft); color: var(--accent-blue); }
+    .tier-badge-purple { background: var(--accent-purple-soft); color: var(--accent-purple); }
+    .tier-badge-emerald { background: var(--accent-emerald-soft); color: var(--accent-emerald); }
+
+    .tier-headline {
+      font-size: 1.22rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.01em;
+    }
+
+    .tier-analogy {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--accent-amber);
+      margin-bottom: 0.85rem;
+    }
+
+    .tier-points {
+      list-style: none;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .tier-points li {
+      position: relative;
+      padding-left: 1.1rem;
+    }
+
+    .tier-points li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+
+    /* Pipeline Flow */
+    .flow-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.75rem;
+      box-shadow: var(--card-shadow);
+      margin-bottom: 2.75rem;
+    }
+
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+
+    @media (max-width: 768px) {
+      .pipeline-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .pipeline-box {
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.15rem;
+    }
+
+    .box-step {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+
+    .box-step-blue { color: var(--accent-blue); }
+    .box-step-emerald { color: var(--accent-emerald); }
+    .box-step-purple { color: var(--accent-purple); }
+
+    .pipeline-box h4 {
+      font-size: 0.98rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .pipeline-box p {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Why Local Systems (Grid of 4) */
+    .reasons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.75rem;
+    }
+
+    .reason-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 1.25rem;
+      box-shadow: var(--card-shadow);
+    }
+
+    .reason-card:hover {
+      box-shadow: var(--card-shadow-hover);
+      border-color: var(--border-strong);
+    }
+
+    .reason-card h4 {
+      font-size: 0.98rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .reason-card p {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Interactive Week 1 Task Tracker */
+    .tracker-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.75rem;
+      box-shadow: var(--card-shadow);
+      margin-bottom: 2.75rem;
+    }
+
+    .tracker-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .progress-pill {
+      font-size: 0.82rem;
+      font-weight: 700;
+      background: var(--accent-emerald-soft);
+      color: var(--accent-emerald);
+      padding: 0.35rem 0.8rem;
+      border-radius: 9999px;
+    }
+
+    .filter-btn-group {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .filter-btn {
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 0.3rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .filter-btn.active {
+      background: var(--accent-blue);
+      color: #ffffff;
+      border-color: var(--accent-blue);
+    }
+
+    .progress-track {
+      background: var(--bg-surface-subtle);
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-emerald));
+      transition: width 0.35s ease;
+    }
+
+    .tasks-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .task-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      background: var(--bg-surface-subtle);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .task-row:hover {
+      border-color: var(--border-strong);
+    }
+
+    .task-row.done {
+      opacity: 0.55;
+    }
+
+    .task-row input[type="checkbox"] {
+      width: 1.15rem;
+      height: 1.15rem;
+      margin-top: 0.15rem;
+      accent-color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    .task-row-info {
+      flex: 1;
+    }
+
+    .task-row-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .task-row.done .task-row-title {
+      text-decoration: line-through;
+    }
+
+    .task-row-desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+      line-height: 1.4;
+    }
+
+    .tag-optional {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      background: var(--accent-amber-soft);
+      color: var(--accent-amber);
+    }
+
+    /* References Table */
+    .table-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--card-shadow);
+      margin-bottom: 2.75rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      background: var(--bg-surface-subtle);
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.9rem 1.2rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 0.9rem 1.2rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--accent-blue-soft);
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-weight: 700;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .action-btn:hover {
+      background: var(--accent-blue);
+      color: #ffffff;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.82rem;
+      color: var(--text-faint);
+    }
+
+    .footer-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- TOP NAV & THEME TOGGLE -->
+  <nav class="nav-bar">
+    <div class="brand-mark">
+      <span>Vietnamese-German University</span>
+      <span style="color: var(--text-faint);">/</span>
+      <span>Computer Science</span>
+    </div>
+
+    <!-- Clear Segmented Theme Selector -->
+    <div class="theme-segmented">
+      <button class="theme-btn active" id="btnLight" onclick="setTheme('light')">☀️ Light</button>
+      <button class="theme-btn" id="btnDark" onclick="setTheme('dark')">🌙 Pitch Black</button>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <header class="hero">
+    <div class="pills-row">
+      <span class="pill pill-blue">Project Course (10 ECTS)</span>
+      <span class="pill pill-emerald">4 Hours / Week</span>
+      <span class="pill pill-purple">Lecture 1 • 2026-09-09</span>
+      <span class="pill pill-amber">Semester 7 WS 2026-2027</span>
+    </div>
+    <h1 class="hero-title">Small Multimodal Models for Clinical Diagnosis</h1>
+    <p class="hero-desc">
+      Architectural blueprint, orientation guidelines, and actionable tasks for building a local diagnostic assistant for tropical and infectious diseases.
+    </p>
+  </header>
+
+  <!-- BENTO GRID: KEY PARAMETERS & CONTACTS -->
+  <div class="bento-grid">
+    
+    <!-- Mission Card -->
+    <div class="bento-cell col-span-8">
+      <div class="accent-strip strip-blue"></div>
+      <div class="cell-header">
+        <span class="cell-tag">Project Target</span>
+        <span class="pill pill-blue" style="font-size: 0.7rem;">Core Mission</span>
+      </div>
+      <h2 class="cell-title">Local Multimodal Diagnosis Support System</h2>
+      <p class="cell-body">
+        Engineered for clinical decision support in tropical and infectious pathologies (e.g. Dengue, Malaria, Ebola, Tuberculosis, Melioidosis, Abscess, Brucellosis). Operates entirely on-premise on free-form clinical notes paired with diagnostic imagery to generate ranked Top-5 differential diagnoses with clinical reasoning.
+      </p>
+    </div>
+
+    <!-- Grading Card -->
+    <div class="bento-cell col-span-4">
+      <div class="accent-strip strip-amber"></div>
+      <div class="cell-header">
+        <span class="cell-tag">Evaluation Weight</span>
+        <span class="pill pill-amber" style="font-size: 0.7rem;">10 ECTS</span>
+      </div>
+      <h2 class="cell-title">Continuous 30% / Final 70%</h2>
+      <p class="cell-body">
+        Weekly live demos, agile sprints, active interaction (30%). Final presentation, defense, and comprehensive technical paper (70%).
+      </p>
+    </div>
+
+    <!-- Supervisor Contact -->
+    <div class="bento-cell col-span-6">
+      <div class="accent-strip strip-emerald"></div>
+      <div class="cell-header">
+        <span class="cell-tag">Course Lecturer & Supervisor</span>
+      </div>
+      <h3 class="cell-title">Dr. Tran Duc Khanh</h3>
+      <p class="cell-body">Senior Lecturer, Faculty of Engineering, VGU</p>
+      <div class="contact-item">
+        <span>Email:</span>
+        <a class="contact-link" href="mailto:khanh.td@vgu.edu.vn">khanh.td@vgu.edu.vn</a>
+      </div>
+      <div class="contact-item">
+        <span>Phone:</span>
+        <span style="font-weight: 700;">0942365177</span>
+        <span style="font-size: 0.78rem; color: var(--text-faint);">(Zalo, WhatsApp, Viber)</span>
+      </div>
+    </div>
+
+    <!-- TA Contact -->
+    <div class="bento-cell col-span-6">
+      <div class="accent-strip strip-purple"></div>
+      <div class="cell-header">
+        <span class="cell-tag">Teaching Assistant</span>
+      </div>
+      <h3 class="cell-title">Le Viet Tin (Mr. Tin)</h3>
+      <p class="cell-body">Teaching Assistant & AI Researcher, VGU CS</p>
+      <div class="contact-item">
+        <span>Email:</span>
+        <a class="contact-link" href="mailto:10422078@student.vgu.edu.vn">10422078@student.vgu.edu.vn</a>
+      </div>
+      <div class="contact-item">
+        <span>Phone:</span>
+        <span style="font-weight: 700;">0907788251</span>
+        <span style="font-size: 0.78rem; color: var(--text-faint);">(Zalo)</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- THE THREE ARCHITECTURAL TIERS -->
+  <div class="section-head">
+    <h2 class="section-title">The Three Technical Tiers</h2>
+    <p class="section-subtitle">A progressive ladder moving from factual grounding to structured fine-tuning and multi-agent consensus.</p>
+  </div>
+
+  <div class="tiers-container">
+
+    <!-- Tier 1 -->
+    <div class="tier-card">
+      <div>
+        <span class="tier-badge tier-badge-blue">Level 1: Grounding</span>
+        <h3 class="tier-headline">RAG & Knowledge Graphs</h3>
+        <p class="tier-analogy">Analogy: Library / Open-Book Exam</p>
+        <ul class="tier-points">
+          <li>Retrieves external authoritative medical knowledge to eliminate hallucinations.</li>
+          <li>Integrates LightRAG or Graph RAG to connect disease, symptom, and treatment entities.</li>
+          <li>Ensures diagnoses are verified against real-time clinical guidelines.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tier 2 -->
+    <div class="tier-card">
+      <div>
+        <span class="tier-badge tier-badge-purple">Level 2: Specialization</span>
+        <h3 class="tier-headline">Parameter-Efficient Fine-Tuning</h3>
+        <p class="tier-analogy">Analogy: Teaching & Mentoring</p>
+        <ul class="tier-points">
+          <li>Adapts small multimodal models via LoRA and QLoRA in 4-bit precision.</li>
+          <li>Trains the network to produce structured Top-5 ranked differential diagnoses.</li>
+          <li>Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO) on clinical rationale.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tier 3 -->
+    <div class="tier-card">
+      <div>
+        <span class="tier-badge tier-badge-emerald">Level 3: Collaboration</span>
+        <h3 class="tier-headline">Multi-Agent Systems</h3>
+        <p class="tier-analogy">Analogy: Clinical Board Consultation</p>
+        <ul class="tier-points">
+          <li>Implements the MedAgents framework to replace single isolated model reasoning.</li>
+          <li>Dedicated specialist agents for radiology imagery, lab vitals, and symptom history.</li>
+          <li>Lead agent coordinates structured debate to pinpoint subtle disease markers.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- DIAGNOSTIC INFERENCE PIPELINE -->
+  <div class="flow-card">
+    <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.25rem;">End-to-End Diagnostic Pipeline</h3>
+    <p style="font-size: 0.88rem; color: var(--text-muted);">How multimodal inputs flow through the local system to produce patient recommendations.</p>
+
+    <div class="pipeline-grid">
+      <div class="pipeline-box">
+        <div class="box-step box-step-blue">Step 1: Ingestion</div>
+        <h4>Multimodal Inputs</h4>
+        <p>Unstructured clinical narratives, patient demographics, travel history, vitals, accompanied by diagnostic imaging (X-rays, CTs, MRIs, pathology slides).</p>
+      </div>
+
+      <div class="pipeline-box">
+        <div class="box-step box-step-purple">Step 2: Processing</div>
+        <h4>Reasoning & Retrieval</h4>
+        <p>Entities extracted to query the medical Knowledge Graph. Vision-Language backbones process imagery, while specialist agents debate differential options.</p>
+      </div>
+
+      <div class="pipeline-box">
+        <div class="box-step box-step-emerald">Step 3: Recommendation</div>
+        <h4>Structured Differential</h4>
+        <p>Ranked Top-5 candidate diseases with explicit reasoning steps, clinical caveats, and recommended confirmatory laboratory tests.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHY BUILD LOCAL SYSTEMS? -->
+  <div class="section-head">
+    <h2 class="section-title">Why Build Local Small Models?</h2>
+    <p class="section-subtitle">Four core advantages over relying on proprietary commercial cloud APIs.</p>
+  </div>
+
+  <div class="reasons-grid">
+    <div class="reason-card">
+      <h4 style="color: var(--accent-blue);">1. HIPAA & Privacy</h4>
+      <p>Protected Health Information (PHI) cannot be dispatched to external third-party cloud servers. Local instances keep data strictly inside hospital boundaries.</p>
+    </div>
+
+    <div class="reason-card">
+      <h4 style="color: var(--accent-emerald);">2. Deep Customization</h4>
+      <p>Direct control over tokenizer vocabularies, system prompts, quantization schemes, and adapter weights tailored for rare tropical conditions.</p>
+    </div>
+
+    <div class="reason-card">
+      <h4 style="color: var(--accent-amber);">3. Zero Ongoing API Costs</h4>
+      <p>Commercial multimodal token billing scales unsustainably in production. Local open-weight architectures eliminate API dependency.</p>
+    </div>
+
+    <div class="reason-card">
+      <h4 style="color: var(--accent-purple);">4. High Employability</h4>
+      <p>Industry recruiters (Hitachi, Katalon, etc.) prize AI engineers who can quantize, fine-tune, benchmark, and deploy local inference engines (vLLM, Ollama).</p>
+    </div>
+  </div>
+
+  <!-- INTERACTIVE TASK TRACKER -->
+  <div class="tracker-card">
+    <div class="tracker-header">
+      <div>
+        <h3 style="font-size: 1.25rem; font-weight: 700;">Week 1 Action Tracker</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Complete these foundational steps before Lecture 2. Checkbox states persist automatically.</p>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span class="progress-pill" id="progressPill">0% Done</span>
+        <div class="filter-btn-group">
+          <button class="filter-btn active" onclick="filterTasks('all', this)">All</button>
+          <button class="filter-btn" onclick="filterTasks('core', this)">Core</button>
+          <button class="filter-btn" onclick="filterTasks('optional', this)">Optional</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="tasks-list" id="tasksContainer">
+      <!-- Task 1 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Study Disease Diagnosis Scoping Review</div>
+          <div class="task-row-desc">Read "Large Language Models for Disease Diagnosis: A Scoping Review" (arXiv:2409.00097) to understand clinical reasoning taxonomy.</div>
+        </div>
+      </label>
+
+      <!-- Task 2 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Inspect MultiCaRe Sub-dataset Notebook</div>
+          <div class="task-row-desc">Examine the official curation scripts to understand how cases and image references are indexed in the repository.</div>
+        </div>
+      </label>
+
+      <!-- Task 3 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Design Cleaning & Formatting Pipeline</div>
+          <div class="task-row-desc">Standardize raw text, strip irrelevant hospital boilerplate, normalize units, and structure instructional prompt formats.</div>
+        </div>
+      </label>
+
+      <!-- Task 4 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Establish Multimodal Processing Method</div>
+          <div class="task-row-desc">Decide resolution standards, aspect ratio handling, image token embedding strategies, and multi-image cases.</div>
+        </div>
+      </label>
+
+      <!-- Task 5 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Select Target Tropical & Infectious Diseases</div>
+          <div class="task-row-desc">Define target clinical conditions (e.g. Dengue, Malaria, Tuberculosis, Ebola, Melioidosis) based on class availability.</div>
+        </div>
+      </label>
+
+      <!-- Task 6 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Estimate Case Volumes & Address Class Imbalance</div>
+          <div class="task-row-desc">Quantify available cases per disease class and outline balancing techniques to prevent skewed predictions.</div>
+        </div>
+      </label>
+
+      <!-- Task 7 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Structure Train, Validation, and Test Partitions</div>
+          <div class="task-row-desc">Split datasets at the unique patient identifier level so images from the same patient never leak between splits.</div>
+        </div>
+      </label>
+
+      <!-- Task 8 -->
+      <label class="task-row" data-kind="core">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Validate Dataset Quality & Clinical Realism</div>
+          <div class="task-row-desc">Ensure provisional doctor diagnoses are properly distinguished from confirmed laboratory discharge findings.</div>
+        </div>
+      </label>
+
+      <!-- Task 9 -->
+      <label class="task-row" data-kind="optional">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Experiment with NotebookLM Synthesis <span class="tag-optional">Optional</span></div>
+          <div class="task-row-desc">Load curated case summaries into Google NotebookLM to explore grounded conversational summarization.</div>
+        </div>
+      </label>
+
+      <!-- Task 10 -->
+      <label class="task-row" data-kind="optional">
+        <input type="checkbox" onchange="handleTaskChange()">
+        <div class="task-row-info">
+          <div class="task-row-title">Run Baseline Inference via Ollama / Colab <span class="tag-optional">Optional</span></div>
+          <div class="task-row-desc">Spin up small open models (LLaVA, Gemma-2-Vision) in Kaggle, Colab, or Ollama to test zero-shot diagnostic behavior.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- KEY LITERATURE & REPOSITORIES -->
+  <div class="section-head">
+    <h2 class="section-title">Curated Literature & Tooling Stack</h2>
+    <p class="section-subtitle">Foundational references cited by Dr. Khanh and TA Mr. Tin.</p>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Topic</th>
+          <th>Resource / Paper Title</th>
+          <th>Direct Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Core Dataset</strong></td>
+          <td>MultiCaRe: Multimodal Clinical Case Dataset (93k cases, 130k images)</td>
+          <td><a class="action-btn" href="https://github.com/mauro-nievoff/MultiCaRe_Dataset" target="_blank">GitHub Repo</a></td>
+        </tr>
+        <tr>
+          <td><strong>Diagnostic Survey</strong></td>
+          <td>Large Language Models for Disease Diagnosis: A Scoping Review (2024)</td>
+          <td><a class="action-btn" href="https://arxiv.org/abs/2409.00097" target="_blank">arXiv:2409.00097</a></td>
+        </tr>
+        <tr>
+          <td><strong>Graph RAG</strong></td>
+          <td>LightRAG: Simple and Fast Retrieval-Augmented Generation (2024)</td>
+          <td><a class="action-btn" href="https://arxiv.org/abs/2410.05779" target="_blank">arXiv:2410.05779</a></td>
+        </tr>
+        <tr>
+          <td><strong>Model Fine-Tuning</strong></td>
+          <td>QLoRA: Efficient Finetuning of Quantized LLMs (Dettmers et al.)</td>
+          <td><a class="action-btn" href="https://arxiv.org/abs/2305.14314" target="_blank">arXiv:2305.14314</a></td>
+        </tr>
+        <tr>
+          <td><strong>Multi-Agent Reasoning</strong></td>
+          <td>MedAgents: LLMs as Collaborators for Zero-shot Medical Reasoning</td>
+          <td><a class="action-btn" href="https://arxiv.org/abs/2311.10537" target="_blank">arXiv:2311.10537</a></td>
+        </tr>
+        <tr>
+          <td><strong>Career Roadmap</strong></td>
+          <td>AI Engineer Comprehensive Skill Tree &amp; Learning Guide</td>
+          <td><a class="action-btn" href="https://roadmap.sh/ai-engineer" target="_blank">roadmap.sh/ai-engineer</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-left">
+      <span style="font-weight: 700; color: var(--text-main);">VGU Computer Science Department</span>
+      <span>Course: Project (10 ECTS) • Academic Year 2026-2027</span>
+    </div>
+    <div>
+      <span>Updated: 2026-09-10 • Lecture 01 Reference</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // Segmented Theme Control: 100% hardcoded to Light Mode on initial load
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const btnLight = document.getElementById('btnLight');
+    const btnDark = document.getElementById('btnDark');
+    
+    if (theme === 'dark') {
+      btnDark.classList.add('active');
+      btnLight.classList.remove('active');
+    } else {
+      btnLight.classList.add('active');
+      btnDark.classList.remove('active');
+    }
+  }
+
+  // Task Tracker with LocalStorage
+  const TASKS_KEY = 'vgu_lecture01_tasks_state';
+
+  function initTasks() {
+    const saved = JSON.parse(localStorage.getItem(TASKS_KEY) || '[]');
+    const rows = document.querySelectorAll('#tasksContainer .task-row');
+    rows.forEach((row, idx) => {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (saved.includes(idx)) {
+        cb.checked = true;
+        row.classList.add('done');
+      }
+    });
+    calcProgress();
+  }
+
+  function handleTaskChange() {
+    const rows = document.querySelectorAll('#tasksContainer .task-row');
+    const completed = [];
+    rows.forEach((row, idx) => {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (cb.checked) {
+        completed.push(idx);
+        row.classList.add('done');
+      } else {
+        row.classList.remove('done');
+      }
+    });
+    localStorage.setItem(TASKS_KEY, JSON.stringify(completed));
+    calcProgress();
+  }
+
+  function calcProgress() {
+    const rows = document.querySelectorAll('#tasksContainer .task-row');
+    const total = rows.length;
+    let checked = 0;
+    rows.forEach(r => {
+      if (r.querySelector('input[type="checkbox"]').checked) checked++;
+    });
+    const pct = Math.round((checked / total) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressPill').textContent = pct + '% Done';
+  }
+
+  function filterTasks(type, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const rows = document.querySelectorAll('#tasksContainer .task-row');
+    rows.forEach(row => {
+      if (type === 'all') {
+        row.style.display = 'flex';
+      } else {
+        const kind = row.getAttribute('data-kind');
+        row.style.display = (kind === type) ? 'flex' : 'none';
+      }
+    });
+  }
+
+  // Initialize on load
+  document.addEventListener('DOMContentLoaded', () => {
+    setTheme('light');
+    initTasks();
+  });
+</script>
+
+</body>
+</html>
