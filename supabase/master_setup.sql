@@ -223,9 +223,13 @@ CREATE TRIGGER trg_recompute_task_status
   AFTER INSERT OR UPDATE OR DELETE ON task_assignees
   FOR EACH ROW EXECUTE FUNCTION recompute_task_status();
 
--- Auto-link seeded profile on Google OAuth login
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+-- Auto-link seeded profile on user registration / login
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   v_name TEXT;
   v_initials TEXT;
@@ -237,27 +241,31 @@ BEGIN
   );
   v_initials := UPPER(LEFT(v_name, 2));
 
-  -- 1. Try to link to an existing seeded profile by matching email
-  UPDATE profiles
-  SET auth_user_id = NEW.id,
-      updated_at = NOW()
-  WHERE email = NEW.email
-    AND auth_user_id IS NULL;
+  BEGIN
+    -- Try to link to an existing seeded profile by matching email
+    UPDATE public.profiles
+    SET auth_user_id = NEW.id,
+        updated_at = NOW()
+    WHERE lower(email) = lower(NEW.email);
 
-  -- 2. If no seeded profile exists with this email, create a new profile row
-  IF NOT FOUND AND NOT EXISTS (SELECT 1 FROM profiles WHERE auth_user_id = NEW.id) THEN
-    INSERT INTO profiles (auth_user_id, name, email, initials)
-    VALUES (NEW.id, v_name, NEW.email, v_initials);
-  END IF;
+    -- If no seeded profile exists with this email, create a new profile row
+    IF NOT FOUND AND NOT EXISTS (SELECT 1 FROM public.profiles WHERE auth_user_id = NEW.id) THEN
+      INSERT INTO public.profiles (auth_user_id, name, email, initials)
+      VALUES (NEW.id, v_name, NEW.email, v_initials);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    -- Prevent trigger failure from aborting user registration
+    NULL;
+  END;
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ------------------------------------------------------------------------------
 -- 4. ROW LEVEL SECURITY (RLS)

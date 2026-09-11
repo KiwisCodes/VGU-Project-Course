@@ -64,7 +64,7 @@ function LoginFormContent() {
         return;
       }
       if (secretKey.trim() !== TEAM_SECRET_KEY) {
-        setFormError(`Invalid secret key "${secretKey.trim()}". You must provide the correct registration key (676767).`);
+        setFormError('Invalid secret key. Please obtain the 6-digit registration key from your team leader.');
         setSubmitting(false);
         return;
       }
@@ -240,11 +240,11 @@ function LoginFormContent() {
                   required
                   value={secretKey}
                   onChange={(e) => setSecretKey(e.target.value)}
-                  placeholder="Enter the 6-digit secret key (676767)"
+                  placeholder="Enter 6-digit registration key"
                   className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-[#121217] text-xs font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
                 <span className="text-[10px] text-amber-700 dark:text-amber-400 mt-1 block">
-                  Required: Enter <code>676767</code> to verify team registration.
+                  Private registration key provided directly by your team leader.
                 </span>
               </div>
             )}
