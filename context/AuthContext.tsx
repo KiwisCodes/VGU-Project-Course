@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useState, useTransition } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { Member } from '@/types';
 
 export interface UserProfile {
   id: string;
@@ -26,6 +25,8 @@ interface AuthContextType {
   loading: boolean;
   isConfigured: boolean;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ error: Error | null }>;
   isTeamLeader: boolean;
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // First query by auth_user_id
-      let { data, error } = await supabase
+      let { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('auth_user_id', authUser.id)
@@ -133,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (!isSupabaseConfigured) {
-      return { error: new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local') };
+      return { error: new Error('Supabase is not configured.') };
     }
     try {
       clearError();
@@ -143,12 +144,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           redirectTo,
           queryParams: {
-            hd: 'student.vgu.edu.vn', // Suggest Google Workspace domain
+            hd: 'student.vgu.edu.vn',
             prompt: 'select_account',
           },
         },
       });
       return { error: error ? new Error(error.message) : null };
+    } catch (err: any) {
+      return { error: err instanceof Error ? err : new Error(String(err)) };
+    }
+  };
+
+  const signInWithPassword = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: new Error('Supabase is not configured.') };
+    }
+    clearError();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
+      return { error: new Error(`Access restricted: Please use your official VGU student email (${VGU_EMAIL_DOMAIN}).`) };
+    }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      if (error) return { error: new Error(error.message) };
+      if (data.user) {
+        setUser(data.user);
+        await fetchProfile(data.user);
+      }
+      return { error: null };
+    } catch (err: any) {
+      return { error: err instanceof Error ? err : new Error(String(err)) };
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string, name: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: new Error('Supabase is not configured.') };
+    }
+    clearError();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
+      return { error: new Error(`Access restricted: Please use your official VGU student email (${VGU_EMAIL_DOMAIN}).`) };
+    }
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: { full_name: name.trim() },
+        },
+      });
+      if (error) return { error: new Error(error.message) };
+      if (data.user) {
+        setUser(data.user);
+        await fetchProfile(data.user);
+      }
+      return { error: null };
     } catch (err: any) {
       return { error: err instanceof Error ? err : new Error(String(err)) };
     }
@@ -197,6 +251,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isConfigured: isSupabaseConfigured,
         signInWithGoogle,
+        signInWithPassword,
+        signUpWithEmail,
         signOut,
         updateProfile,
         isTeamLeader,
