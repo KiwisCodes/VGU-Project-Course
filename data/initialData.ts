@@ -2,142 +2,32 @@ import { Member, Task, LectureSession } from '@/types';
 
 export const INITIAL_MEMBERS: Member[] = [
   {
-    id: 'member-1',
-    name: 'Lê Quang Minh Khoa',
-    studentId: '10423057',
-    role: 'Team Leader & ML Architect',
-    email: '10423057@student.vgu.edu.vn',
-    avatarBg: '#2563eb',
-    initials: 'LK',
-    bio: 'Oversees overall system architecture, agile sprint coordination, and integration of the 3 technical tiers.',
-    skills: ['PyTorch', 'Vision-Language', 'System Design', 'Agile']
-  },
-  {
-    id: 'member-2',
-    name: 'Nguyễn Võ Minh Khôi',
-    studentId: '10423063',
-    role: 'Clinical Data & Pipeline Engineer',
-    email: '10423063@student.vgu.edu.vn',
-    avatarBg: '#059669',
-    initials: 'NK',
-    bio: 'Responsible for PubMed MultiCaRe dataset extraction, clinical text normalization, and multimodal image preprocessing.',
-    skills: ['PubMed MultiCaRe', 'Pandas', 'OpenCV', 'Data Curation']
-  },
-  {
-    id: 'member-3',
-    name: 'Nguyễn Đức Khang',
-    studentId: '10423054',
-    role: 'Vision-Language & PEFT Engineer',
-    email: '10423054@student.vgu.edu.vn',
-    avatarBg: '#7c3aed',
-    initials: 'DK',
-    bio: 'Focuses on Small Multimodal backbones (LLaVA, Gemma-2-Vision), 4-bit quantization, and QLoRA instruction tuning.',
-    skills: ['Hugging Face', 'QLoRA', 'bitsandbytes', 'SFT/DPO']
-  },
-  {
-    id: 'member-4',
+    id: '11111111-0000-0000-0000-000000000004',
     name: 'Phan Thành Hưng',
     studentId: '10423051',
-    role: 'RAG & Medical Knowledge Graph Specialist',
+    role: '',
     email: '10423051@student.vgu.edu.vn',
     avatarBg: '#0891b2',
     initials: 'TH',
-    bio: 'Builds vector retrieval and LightRAG graph pipelines grounded in authoritative infectious disease textbooks.',
-    skills: ['LightRAG', 'ChromaDB', 'Neo4j', 'Vector Embeddings']
+    bio: '',
+    skills: [],
+    isTeamLeader: true,
   },
   {
-    id: 'member-5',
-    name: 'Dương Quý Trang',
-    studentId: '10423110',
-    role: 'Multi-Agent & Clinical Evaluation Engineer',
-    email: '10423110@student.vgu.edu.vn',
-    avatarBg: '#d97706',
-    initials: 'QT',
-    bio: 'Implements the MedAgents collaborative debate protocol and evaluates clinical diagnostic metrics (Ragas, DeepEval).',
-    skills: ['MedAgents', 'Ragas', 'DeepEval', 'Prompt Optimization']
+    id: 'bd5941a6-c419-43fe-a550-eb2de5cf9336',
+    name: 'Tester',
+    studentId: '0001',
+    role: 'Tester',
+    email: '0001@student.vgu.edu.vn',
+    avatarBg: '#6366f1',
+    initials: 'TS',
+    bio: '',
+    skills: [],
+    isTeamLeader: false,
   }
 ];
 
-export const INITIAL_TASKS: Task[] = [
-  {
-    id: 'task-w1-1',
-    title: 'Large Language Models for Disease Diagnosis: A Scoping Review',
-    description: 'Read arXiv:2409.00097 scoping review to analyze diagnostic prompting paradigms, clinical reasoning capabilities, and evaluation benchmarks across the team.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'Evaluation',
-    pillar: 'Evaluation',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  },
-  {
-    id: 'task-w1-2',
-    title: 'LightRAG: Simple and Fast Retrieval-Augmented Generation',
-    description: 'Read arXiv:2410.05779 to study dual-level graph retrieval-augmented generation and entity-relationship indexing for medical knowledge grounding.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'RAG / KG',
-    pillar: 'RAG / KG',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  },
-  {
-    id: 'task-w1-3',
-    title: 'QLoRA: Efficient Finetuning of Quantized LLMs',
-    description: 'Read arXiv:2305.14314 to study parameter-efficient fine-tuning, 4-bit NormalFloat quantization, double quantization, and paged optimizers.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'Fine-Tuning',
-    pillar: 'Fine-Tuning',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  },
-  {
-    id: 'task-w1-4',
-    title: 'MedAgents: Large Language Models as Collaborators for Zero-Shot Medical Imaging',
-    description: 'Read arXiv:2311.10537 to examine multi-agent collaborative medical reasoning, multidisciplinary clinical consultation, and zero-shot consensus mechanisms.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'Multi-Agents',
-    pillar: 'Multi-Agents',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  },
-  {
-    id: 'task-w1-5',
-    title: 'MultiCare - A Multimodal Clinical Case Dataset',
-    description: 'Read and analyze the MultiCaRe dataset paper/structure (93k cases, 130k images) covering clinical categories, multimodal metadata, and class distribution.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'Data Engineering',
-    pillar: 'Data Engineering',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  },
-  {
-    id: 'task-w1-6',
-    title: 'Explore Datasets: MultiCaRe Dataset Repository',
-    description: 'Clone and explore the official dataset repository at https://github.com/mauro-nievoff/MultiCaRe_Dataset. Review Jupyter extraction notebooks, sample indexing, and image formats.',
-    assigneeIds: ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'],
-    lectureId: 1,
-    tag: 'Data Engineering',
-    pillar: 'Data Engineering',
-    priority: 'High',
-    status: 'In Progress',
-    dueDate: '2026-09-16',
-    createdAt: '2026-09-09'
-  }
-];
+export const INITIAL_TASKS: Task[] = [];
 
 export const LECTURE_SESSIONS: LectureSession[] = [
   {

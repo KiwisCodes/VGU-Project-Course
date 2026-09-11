@@ -89,8 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             auth_user_id: authUser.id,
             name: fallbackName,
             email: authUser.email,
+            student_id: authUser.email.split('@')[0],
             initials: fallbackName.slice(0, 2).toUpperCase(),
-            role: 'Team Member',
+            role: '',
+            bio: '',
+            skills: [],
+            phone: null,
             is_team_leader: false,
           };
           const { data: inserted } = await supabase

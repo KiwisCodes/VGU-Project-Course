@@ -170,8 +170,8 @@ function mapDbFolderToFolder(folderRow: any): DriveFolder {
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS.map(normalizeTask));
-  const [memberNotes, setMemberNotes] = useState<Record<string, string>>(INITIAL_MEMBER_NOTES);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [memberNotes, setMemberNotes] = useState<Record<string, string>>({});
   const [driveFolders, setDriveFolders] = useState<DriveFolder[]>(DRIVE_FOLDERS);
   const [tags, setTags] = useState<string[]>(DEFAULT_TAGS);
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
@@ -203,7 +203,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .select('*')
         .order('created_at', { ascending: true });
 
-      if (!profileErr && profileRows && profileRows.length > 0) {
+      if (!profileErr && profileRows) {
         setMembers(profileRows.map(mapDbProfileToMember));
       }
 
@@ -212,7 +212,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .from('tasks')
         .select('*, task_assignees(*)');
 
-      if (!taskErr && taskRows && taskRows.length > 0) {
+      if (!taskErr && taskRows) {
         setTasks(taskRows.map(mapDbTaskToTask));
       }
 

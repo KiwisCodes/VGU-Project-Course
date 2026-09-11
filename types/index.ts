@@ -14,6 +14,7 @@ export interface Member {
   initials: string;
   bio: string;
   skills: string[];
+  isTeamLeader?: boolean;
 }
 
 /**
