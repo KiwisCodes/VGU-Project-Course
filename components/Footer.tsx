@@ -2,10 +2,10 @@
 
 import React, { useRef } from 'react';
 import { useProject } from '@/context/ProjectContext';
-import { Download, Upload, RotateCcw, Mail, Phone } from 'lucide-react';
+import { Download, Upload, Mail, Phone } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { exportData, importData, resetToDefaults } = useProject();
+  const { exportData, importData } = useProject();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -25,13 +25,6 @@ export const Footer: React.FC = () => {
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleReset = () => {
-    if (confirm('Reset project data back to initial default state?')) {
-      resetToDefaults();
-      alert('Data reset to initial state.');
-    }
   };
 
   return (
@@ -73,7 +66,7 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Col: Data Backup & Reset */}
+        {/* Right Col: Data Backup */}
         <div className="flex flex-col gap-2.5">
           <span className="font-bold text-xs uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
             Team Data Persistence
@@ -81,7 +74,7 @@ export const Footer: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={exportData}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold hover:opacity-80 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold hover:opacity-80 transition-all cursor-pointer"
               style={{ borderColor: 'var(--border-strong)', backgroundColor: 'var(--bg-surface-elevated)', color: 'var(--text-main)' }}
             >
               <Download className="w-3.5 h-3.5" />
@@ -90,21 +83,11 @@ export const Footer: React.FC = () => {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold hover:opacity-80 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold hover:opacity-80 transition-all cursor-pointer"
               style={{ borderColor: 'var(--border-strong)', backgroundColor: 'var(--bg-surface-elevated)', color: 'var(--text-main)' }}
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Import Backup</span>
-            </button>
-
-            <button
-              onClick={handleReset}
-              title="Reset all tasks and members to initial values"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-semibold opacity-70 hover:opacity-100 transition-all"
-              style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
             </button>
           </div>
 

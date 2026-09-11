@@ -171,7 +171,6 @@ This project focuses on building a privacy-preserving, locally deployable clinic
 - **Project Backup Engine:**
   - **Export Project Backup (JSON):** Downloads a complete JSON snapshot containing all tasks, members, lecture notes, drive folders, and tags.
   - **Import Project Backup (JSON):** Restores data from a previously exported backup file with schema validation and error handling.
-  - **Reset to Factory Defaults:** Restores the application to pristine initial data and clears legacy local storage keys.
 
 ---
 
