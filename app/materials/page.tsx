@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/context/ProjectContext';
 import { DriveFolder, DriveFile } from '@/types';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   Folder, 
   FolderPlus,
@@ -57,6 +58,9 @@ export default function MaterialsPage() {
 
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [editingFile, setEditingFile] = useState<DriveFile | null>(null);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [fileForm, setFileForm] = useState({
     name: '',
     title: '',
@@ -195,6 +199,8 @@ export default function MaterialsPage() {
   const handleOpenNewFile = () => {
     if (!activeFolder) return;
     setEditingFile(null);
+    setSelectedUploadFile(null);
+    setFileError(null);
     setFileForm({
       name: `Lecture_${activeFolder.lectureNumber < 10 ? '0' + activeFolder.lectureNumber : activeFolder.lectureNumber}_Notes.pdf`,
       title: `Lecture ${activeFolder.lectureNumber} Overview & Slides`,
@@ -213,6 +219,8 @@ export default function MaterialsPage() {
   const handleOpenEditFile = (file: DriveFile, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingFile(file);
+    setSelectedUploadFile(null);
+    setFileError(null);
     setFileForm({
       name: file.name,
       title: file.title,
@@ -227,10 +235,25 @@ export default function MaterialsPage() {
     setIsFileModalOpen(true);
   };
 
-  // Handle Local File Selection (Simulated Upload / Path Autodetect)
+  const MAX_FILE_BYTES = 52428800; // 50 MB Free Tier limit
+
+  // Handle Local File Selection (Upload / Path Autodetect)
   const handleFilePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
+
+    setFileError(null);
+
+    // Enforce Supabase Free Tier 50 MB limit
+    if (selected.size > MAX_FILE_BYTES) {
+      const selectedMb = (selected.size / (1024 * 1024)).toFixed(1);
+      setFileError(`File exceeds the 50 MB Free Tier upload limit (selected: ${selectedMb} MB). Please compress or split the file.`);
+      e.target.value = '';
+      setSelectedUploadFile(null);
+      return;
+    }
+
+    setSelectedUploadFile(selected);
 
     let detectedType: 'pdf' | 'html' | 'slides' | 'doc' = 'pdf';
     const lowerName = selected.name.toLowerCase();
@@ -256,9 +279,47 @@ export default function MaterialsPage() {
   };
 
   // Save File
-  const handleSaveFile = (e: React.FormEvent) => {
+  const handleSaveFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeFolder || !fileForm.name.trim() || !fileForm.url.trim()) return;
+    if (!activeFolder || !fileForm.name.trim()) return;
+
+    let targetUrl = fileForm.url.trim();
+
+    // If a physical file was selected and Supabase is configured, upload to Supabase Storage
+    if (selectedUploadFile && isSupabaseConfigured) {
+      try {
+        setIsUploading(true);
+        const folderSlug = activeFolder.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanFileName = `${Date.now()}_${selectedUploadFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const storagePath = `${folderSlug}/${cleanFileName}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from('lecture-materials')
+          .upload(storagePath, selectedUploadFile, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (uploadErr) {
+          throw uploadErr;
+        }
+
+        const { data: publicData } = supabase.storage
+          .from('lecture-materials')
+          .getPublicUrl(storagePath);
+
+        if (publicData?.publicUrl) {
+          targetUrl = publicData.publicUrl;
+        }
+      } catch (err: any) {
+        console.error('Storage upload failed:', err);
+        setFileError(`Upload failed: ${err.message || 'Could not upload file to storage.'}`);
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
 
     const highlightsList = fileForm.highlights
       .split('\n')
@@ -273,7 +334,7 @@ export default function MaterialsPage() {
         type: fileForm.type,
         size: fileForm.size.trim(),
         sizeBytes: fileForm.sizeBytes,
-        url: fileForm.url.trim(),
+        url: targetUrl,
         description: fileForm.description.trim(),
         highlights: highlightsList
       });
@@ -286,7 +347,7 @@ export default function MaterialsPage() {
         type: fileForm.type,
         size: fileForm.size.trim(),
         sizeBytes: fileForm.sizeBytes,
-        url: fileForm.url.trim(),
+        url: targetUrl,
         description: fileForm.description.trim(),
         highlights: highlightsList
       });
@@ -294,6 +355,8 @@ export default function MaterialsPage() {
     }
     setIsFileModalOpen(false);
     setEditingFile(null);
+    setSelectedUploadFile(null);
+    setFileError(null);
   };
 
   // Confirm Delete Handler
@@ -322,6 +385,7 @@ export default function MaterialsPage() {
             <span className="pill-badge pill-blue">Course Drive</span>
             <span className="pill-badge pill-emerald">{driveFolders.length} Lecture Folders</span>
             <span className="pill-badge pill-purple">Live Storage</span>
+            <span className="pill-badge pill-amber">50MB Max / 1GB Tier</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text-main)' }}>
             Materials &amp; Slide Drive
@@ -1101,16 +1165,29 @@ export default function MaterialsPage() {
 
             <form onSubmit={handleSaveFile} className="space-y-3.5 text-xs">
               
-              {/* Optional Local File Autofill */}
+              {/* File Error Notice */}
+              {fileError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-xs">Upload Validation Error</p>
+                      <p className="text-[11px] mt-0.5">{fileError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Optional Local File Autofill / Cloud Upload */}
               {!editingFile && (
                 <div className="p-3 rounded-xl border border-dashed text-center" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
                   <label className="cursor-pointer block">
                     <Upload className="w-5 h-5 mx-auto mb-1 text-blue-500" />
                     <span className="font-bold text-xs block" style={{ color: 'var(--accent-blue)' }}>
-                      Click to choose local file to autofill
+                      {isSupabaseConfigured ? 'Choose file to upload to Supabase Storage' : 'Click to choose local file to autofill'}
                     </span>
                     <span className="text-[10px] text-muted block">
-                      Detects name, file type, and estimated size automatically
+                      Max 50 MB per file (Free Tier limit). Formats: PDF, HTML, Slides, Markdown
                     </span>
                     <input
                       type="file"
@@ -1118,6 +1195,11 @@ export default function MaterialsPage() {
                       className="hidden"
                     />
                   </label>
+                  {selectedUploadFile && (
+                    <div className="mt-2 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      Ready to upload: {selectedUploadFile.name} ({(selectedUploadFile.size / (1024 * 1024)).toFixed(1)} MB)
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1258,10 +1340,11 @@ export default function MaterialsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl font-bold text-white shadow-xs hover:opacity-90 transition-all text-xs cursor-pointer"
+                  disabled={isUploading}
+                  className="px-4 py-2 rounded-xl font-bold text-white shadow-xs hover:opacity-90 transition-all text-xs cursor-pointer disabled:opacity-50"
                   style={{ backgroundColor: 'var(--accent-blue)' }}
                 >
-                  {editingFile ? 'Save Changes' : 'Add File'}
+                  {isUploading ? 'Uploading to Storage...' : editingFile ? 'Save Changes' : selectedUploadFile ? 'Upload to Storage & Save' : 'Add File'}
                 </button>
               </div>
             </form>

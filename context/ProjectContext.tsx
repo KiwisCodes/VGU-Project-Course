@@ -1,9 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Member, Task, DriveFolder, DriveFile, TaskStatus, getTaskOverallStatus, getTaskMemberStatus } from '@/types';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { Member, Task, DriveFolder, DriveFile, TaskStatus, getTaskOverallStatus } from '@/types';
 import { INITIAL_MEMBERS, INITIAL_TASKS, INITIAL_MEMBER_NOTES } from '@/data/initialData';
 import { DRIVE_FOLDERS } from '@/data/driveData';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 interface ProjectContextType {
   members: Member[];
@@ -14,6 +15,8 @@ interface ProjectContextType {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
+  isSupabase: boolean;
+  syncStatus: 'synced' | 'syncing' | 'offline';
   // Tag Actions
   addTag: (tag: string) => void;
   deleteTag: (tag: string) => { success: boolean; message: string };
@@ -67,7 +70,7 @@ const STORAGE_KEYS = {
   THEME: 'vgu_project_theme_preference'
 };
 
-const normalizeTask = (t: any): Task => {
+export const normalizeTask = (t: any): Task => {
   let assigneeIds: string[] = [];
   if (Array.isArray(t.assigneeIds)) {
     assigneeIds = t.assigneeIds;
@@ -95,6 +98,76 @@ const normalizeTask = (t: any): Task => {
   };
 };
 
+function mapDbProfileToMember(row: any): Member {
+  return {
+    id: row.id,
+    name: row.name,
+    studentId: row.student_id || undefined,
+    role: row.role || '',
+    email: row.email || '',
+    phone: row.phone || undefined,
+    avatarBg: row.avatar_bg || '#2563eb',
+    initials: row.initials || (row.name ? row.name.slice(0, 2).toUpperCase() : 'U'),
+    bio: row.bio || '',
+    skills: Array.isArray(row.skills) ? row.skills : [],
+  };
+}
+
+function mapDbTaskToTask(row: any): Task {
+  const assignees = Array.isArray(row.task_assignees) ? row.task_assignees : [];
+  const assigneeIds = assignees.map((a: any) => a.member_id);
+  const memberStatuses: Record<string, TaskStatus> = {};
+  assignees.forEach((a: any) => {
+    if (a.member_id) {
+      memberStatuses[a.member_id] = a.status || 'Backlog';
+    }
+  });
+
+  const baseTask: Task = {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    lectureId: row.lecture_id || 1,
+    tag: row.tag || 'Data Engineering',
+    pillar: row.tag || 'Data Engineering',
+    priority: row.priority || 'Medium',
+    status: row.status || 'Backlog',
+    dueDate: row.due_date ? String(row.due_date).split('T')[0] : new Date().toISOString().split('T')[0],
+    createdAt: row.created_at ? String(row.created_at).split('T')[0] : new Date().toISOString().split('T')[0],
+    assigneeIds,
+    memberStatuses,
+  };
+  return normalizeTask(baseTask);
+}
+
+function mapDbFolderToFolder(folderRow: any): DriveFolder {
+  const files = Array.isArray(folderRow.drive_files)
+    ? folderRow.drive_files.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        title: f.title,
+        author: f.author || undefined,
+        type: f.type || 'pdf',
+        size: f.size || '0 KB',
+        sizeBytes: Number(f.size_bytes) || 0,
+        url: f.url || '',
+        updatedAt: f.updated_at ? String(f.updated_at).split('T')[0] : new Date().toISOString().split('T')[0],
+        description: f.description || undefined,
+        highlights: Array.isArray(f.highlights) ? f.highlights : [],
+      }))
+    : [];
+
+  return {
+    id: folderRow.id,
+    name: folderRow.name,
+    lectureNumber: folderRow.lecture_number,
+    date: folderRow.date,
+    status: folderRow.status,
+    description: folderRow.description || '',
+    files,
+  };
+}
+
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS.map(normalizeTask));
@@ -103,8 +176,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [tags, setTags] = useState<string[]>(DEFAULT_TAGS);
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
   const [isHydrated, setIsHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
 
-  // Initialize from LocalStorage with auto-migration
+  // Load theme preference early
   useEffect(() => {
     try {
       const storedTheme = localStorage.getItem(STORAGE_KEYS.THEME) as 'light' | 'dark';
@@ -114,14 +188,92 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else {
         document.documentElement.setAttribute('data-theme', 'light');
       }
+    } catch (e) {}
+  }, []);
 
+  // Fetch all state from Supabase
+  const fetchSupabaseData = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    setSyncStatus('syncing');
+
+    try {
+      // 1. Fetch Profiles
+      const { data: profileRows, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (!profileErr && profileRows && profileRows.length > 0) {
+        setMembers(profileRows.map(mapDbProfileToMember));
+      }
+
+      // 2. Fetch Tasks with Assignees
+      const { data: taskRows, error: taskErr } = await supabase
+        .from('tasks')
+        .select('*, task_assignees(*)');
+
+      if (!taskErr && taskRows && taskRows.length > 0) {
+        setTasks(taskRows.map(mapDbTaskToTask));
+      }
+
+      // 3. Fetch Member Notes
+      const { data: noteRows, error: noteErr } = await supabase
+        .from('member_notes')
+        .select('*');
+
+      if (!noteErr && noteRows) {
+        const notesMap: Record<string, string> = {};
+        noteRows.forEach((n: any) => {
+          notesMap[`${n.member_id}_lecture_${n.lecture_id}`] = n.content;
+          if (n.lecture_id === 1) {
+            notesMap[n.member_id] = n.content;
+          }
+        });
+        setMemberNotes(notesMap);
+      }
+
+      // 4. Fetch Drive Folders with Files
+      const { data: folderRows, error: folderErr } = await supabase
+        .from('drive_folders')
+        .select('*, drive_files(*)')
+        .order('lecture_number', { ascending: true });
+
+      if (!folderErr && folderRows && folderRows.length > 0) {
+        setDriveFolders(folderRows.map(mapDbFolderToFolder));
+      }
+
+      // 5. Fetch Tags
+      const { data: tagRows, error: tagErr } = await supabase
+        .from('tags')
+        .select('name')
+        .order('name', { ascending: true });
+
+      if (!tagErr && tagRows && tagRows.length > 0) {
+        setTags(Array.from(new Set([...DEFAULT_TAGS, ...tagRows.map((t: any) => t.name)])));
+      }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Error fetching Supabase data:', err);
+      setSyncStatus('offline');
+    }
+  }, []);
+
+  // Primary Hydration: Supabase first, fallback to LocalStorage
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      fetchSupabaseData().finally(() => setIsHydrated(true));
+      return;
+    }
+
+    // LocalStorage Fallback
+    try {
       const storedMembers = localStorage.getItem(STORAGE_KEYS.MEMBERS);
       if (storedMembers) {
         try {
           const parsed = JSON.parse(storedMembers);
           if (Array.isArray(parsed) && parsed.some((m: any) => m.name === 'Alex Nguyen')) {
             setMembers(INITIAL_MEMBERS);
-            localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(INITIAL_MEMBERS));
           } else if (Array.isArray(parsed) && parsed.length > 0) {
             setMembers(parsed);
           }
@@ -136,20 +288,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const parsed = JSON.parse(storedTasksV5);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setTasks(parsed.map(normalizeTask));
-          } else {
-            setTasks(INITIAL_TASKS.map(normalizeTask));
           }
-        } catch (e) {
-          setTasks(INITIAL_TASKS.map(normalizeTask));
-        }
-      } else {
-        // Automatically switch to new INITIAL_TASKS and remove obsolete task keys
-        setTasks(INITIAL_TASKS.map(normalizeTask));
-        try {
-          localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V4);
-          localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V3);
-          localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V2);
-          localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS);
         } catch (e) {}
       }
 
@@ -159,23 +298,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const parsedNotes = JSON.parse(storedNotes);
           if (parsedNotes && typeof parsedNotes === 'object' && !Array.isArray(parsedNotes)) {
             setMemberNotes(parsedNotes);
-          } else {
-            setMemberNotes({});
           }
-        } catch (e) {
-          setMemberNotes({});
-        }
-      } else {
-        // Reset to completely clean notes
-        setMemberNotes({});
-        try {
-          localStorage.removeItem(STORAGE_KEYS.LEGACY_NOTES_V1);
         } catch (e) {}
       }
 
       const storedDrive = localStorage.getItem(STORAGE_KEYS.DRIVE);
       if (storedDrive) {
-        setDriveFolders(JSON.parse(storedDrive));
+        try {
+          setDriveFolders(JSON.parse(storedDrive));
+        } catch (e) {}
       }
 
       const storedTags = localStorage.getItem(STORAGE_KEYS.TAGS);
@@ -191,10 +322,45 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.error('Failed to load project state from localStorage:', e);
     } finally {
       setIsHydrated(true);
+      setSyncStatus('offline');
     }
-  }, []);
+  }, [fetchSupabaseData]);
 
-  // Sync to LocalStorage whenever state updates
+  // Realtime Subscriptions when Supabase is configured
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel('vgu-project-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_assignees' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_notes' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drive_folders' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drive_files' }, () => {
+        fetchSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, () => {
+        fetchSupabaseData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchSupabaseData]);
+
+  // Sync to LocalStorage as secondary offline backup
   useEffect(() => {
     if (!isHydrated) return;
     try {
@@ -204,9 +370,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       localStorage.setItem(STORAGE_KEYS.DRIVE, JSON.stringify(driveFolders));
       localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(tags));
       localStorage.setItem(STORAGE_KEYS.THEME, theme);
-    } catch (e) {
-      console.error('Failed to save state to localStorage:', e);
-    }
+    } catch (e) {}
   }, [members, tasks, memberNotes, driveFolders, tags, theme, isHydrated]);
 
   const setTheme = (newTheme: 'light' | 'dark') => {
@@ -219,10 +383,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTheme(next);
   };
 
-  const addTag = (newTag: string) => {
+  // --- Tag Methods ---
+  const addTag = async (newTag: string) => {
     const trimmed = newTag.trim();
     if (!trimmed) return;
-    setTags(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+    setTags((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('tags').upsert({ name: trimmed }, { onConflict: 'name' });
+      } catch (err) {
+        console.error('Failed to add tag to Supabase:', err);
+      }
+    }
   };
 
   const deleteTag = (tagToDelete: string): { success: boolean; message: string } => {
@@ -231,7 +404,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, message: 'Tag name cannot be empty.' };
     }
     const associatedTasksCount = tasks.filter(
-      t => (t.tag || t.pillar || '').trim().toLowerCase() === trimmed.toLowerCase()
+      (t) => (t.tag || t.pillar || '').trim().toLowerCase() === trimmed.toLowerCase()
     ).length;
 
     if (associatedTasksCount > 0) {
@@ -241,7 +414,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     }
 
-    setTags(prev => prev.filter(t => t.toLowerCase() !== trimmed.toLowerCase()));
+    setTags((prev) => prev.filter((t) => t.toLowerCase() !== trimmed.toLowerCase()));
+
+    if (isSupabaseConfigured) {
+      supabase.from('tags').delete().eq('name', trimmed).then();
+    }
+
     return {
       success: true,
       message: `Tag "${trimmed}" deleted successfully.`
@@ -249,64 +427,194 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // --- Task Methods ---
-  const addTask = (taskData: Omit<Task, 'id' | 'createdAt'>) => {
+  const addTask = async (taskData: Omit<Task, 'id' | 'createdAt'>) => {
     const tag = taskData.tag || (taskData as any).pillar || 'Data Engineering';
+    const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'task-' + Date.now();
+    const today = new Date().toISOString().split('T')[0];
+
     const newTask: Task = {
       ...taskData,
       tag,
       pillar: tag,
-      id: 'task-' + Date.now(),
-      createdAt: new Date().toISOString().split('T')[0]
+      id: tempId,
+      createdAt: today,
     };
-    setTasks(prev => [newTask, ...prev]);
+
+    setTasks((prev) => [newTask, ...prev]);
     addTag(tag);
+
+    if (isSupabaseConfigured) {
+      try {
+        // Insert task row
+        const { data: inserted, error: taskErr } = await supabase
+          .from('tasks')
+          .insert({
+            title: taskData.title,
+            description: taskData.description || '',
+            lecture_id: taskData.lectureId || 1,
+            tag,
+            priority: taskData.priority || 'High',
+            status: taskData.status || 'Backlog',
+            due_date: taskData.dueDate || today,
+          })
+          .select()
+          .single();
+
+        if (taskErr) throw taskErr;
+
+        if (inserted && taskData.assigneeIds && taskData.assigneeIds.length > 0) {
+          const assigneeRows = taskData.assigneeIds.map((memberId) => ({
+            task_id: inserted.id,
+            member_id: memberId,
+            status: taskData.memberStatuses?.[memberId] || taskData.status || 'Backlog',
+          }));
+          await supabase.from('task_assignees').insert(assigneeRows);
+        }
+      } catch (err) {
+        console.error('Failed to create task in Supabase:', err);
+      }
+    }
   };
 
-  const updateTask = (updatedTask: Task) => {
-    setTasks(prev => prev.map(t => (t.id === updatedTask.id ? normalizeTask(updatedTask) : t)));
+  const updateTask = async (updatedTask: Task) => {
+    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? normalizeTask(updatedTask) : t)));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('tasks')
+          .update({
+            title: updatedTask.title,
+            description: updatedTask.description,
+            lecture_id: updatedTask.lectureId,
+            tag: updatedTask.tag,
+            priority: updatedTask.priority,
+            status: updatedTask.status,
+            due_date: updatedTask.dueDate,
+          })
+          .eq('id', updatedTask.id);
+
+        // Sync assignees
+        if (updatedTask.assigneeIds) {
+          await supabase.from('task_assignees').delete().eq('task_id', updatedTask.id);
+          if (updatedTask.assigneeIds.length > 0) {
+            const rows = updatedTask.assigneeIds.map((mId) => ({
+              task_id: updatedTask.id,
+              member_id: mId,
+              status: updatedTask.memberStatuses?.[mId] || updatedTask.status || 'Backlog',
+            }));
+            await supabase.from('task_assignees').insert(rows);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to update task in Supabase:', err);
+      }
+    }
   };
 
-  const setMemberTaskStatus = (taskId: string, memberId: string, newStatus: TaskStatus) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t;
+  const setMemberTaskStatus = async (taskId: string, memberId: string, newStatus: TaskStatus) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id !== taskId) return t;
+        const memberStatuses: Record<string, TaskStatus> = {
+          ...(t.memberStatuses || {}),
+          [memberId]: newStatus,
+        };
+        return normalizeTask({ ...t, memberStatuses });
+      })
+    );
 
-      const memberStatuses: Record<string, TaskStatus> = {
-        ...(t.memberStatuses || {}),
-        [memberId]: newStatus
-      };
-
-      const updated = normalizeTask({
-        ...t,
-        memberStatuses
-      });
-
-      return updated;
-    }));
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('task_assignees')
+          .upsert(
+            { task_id: taskId, member_id: memberId, status: newStatus },
+            { onConflict: 'task_id,member_id' }
+          );
+      } catch (err) {
+        console.error('Failed to update assignee status in Supabase:', err);
+      }
+    }
   };
 
-  const deleteTask = (taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+  const deleteTask = async (taskId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('tasks').delete().eq('id', taskId);
+      } catch (err) {
+        console.error('Failed to delete task in Supabase:', err);
+      }
+    }
   };
 
   // --- Member Methods ---
-  const addMember = (memberData: Omit<Member, 'id'>) => {
-    const newMember: Member = {
-      ...memberData,
-      id: 'member-' + Date.now()
-    };
-    setMembers(prev => [...prev, newMember]);
+  const addMember = async (memberData: Omit<Member, 'id'>) => {
+    const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'member-' + Date.now();
+    const newMember: Member = { ...memberData, id: tempId };
+    setMembers((prev) => [...prev, newMember]);
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').insert({
+          name: memberData.name,
+          student_id: memberData.studentId || null,
+          role: memberData.role,
+          email: memberData.email,
+          phone: memberData.phone || null,
+          avatar_bg: memberData.avatarBg,
+          initials: memberData.initials,
+          bio: memberData.bio,
+          skills: memberData.skills,
+        });
+      } catch (err) {
+        console.error('Failed to add member to Supabase:', err);
+      }
+    }
   };
 
-  const updateMember = (updatedMember: Member) => {
-    setMembers(prev => prev.map(m => (m.id === updatedMember.id ? updatedMember : m)));
+  const updateMember = async (updatedMember: Member) => {
+    setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            name: updatedMember.name,
+            student_id: updatedMember.studentId || null,
+            role: updatedMember.role,
+            phone: updatedMember.phone || null,
+            avatar_bg: updatedMember.avatarBg,
+            initials: updatedMember.initials,
+            bio: updatedMember.bio,
+            skills: updatedMember.skills,
+          })
+          .eq('id', updatedMember.id);
+      } catch (err) {
+        console.error('Failed to update member in Supabase:', err);
+      }
+    }
   };
 
-  const deleteMember = (memberId: string) => {
-    setMembers(prev => prev.filter(m => m.id !== memberId));
-    setTasks(prev => prev.map(t => ({
-      ...t,
-      assigneeIds: t.assigneeIds.filter(id => id !== memberId)
-    })));
+  const deleteMember = async (memberId: string) => {
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
+    setTasks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        assigneeIds: t.assigneeIds.filter((id) => id !== memberId),
+      }))
+    );
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').delete().eq('id', memberId);
+      } catch (err) {
+        console.error('Failed to delete member in Supabase:', err);
+      }
+    }
   };
 
   const getMemberLectureNote = (memberId: string, lectureId: number): string => {
@@ -314,25 +622,32 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (memberNotes[key] !== undefined) {
       return memberNotes[key];
     }
-    // Backward compatibility for lecture 1
     if (lectureId === 1 && memberNotes[memberId] !== undefined) {
       return memberNotes[memberId];
     }
     return '';
   };
 
-  const setMemberLectureNote = (memberId: string, lectureId: number, note: string) => {
+  const setMemberLectureNote = async (memberId: string, lectureId: number, note: string) => {
     const key = `${memberId}_lecture_${lectureId}`;
-    setMemberNotes(prev => {
-      const next = {
-        ...prev,
-        [key]: note
-      };
-      if (lectureId === 1) {
-        next[memberId] = note;
-      }
+    setMemberNotes((prev) => {
+      const next = { ...prev, [key]: note };
+      if (lectureId === 1) next[memberId] = note;
       return next;
     });
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('member_notes')
+          .upsert(
+            { member_id: memberId, lecture_id: lectureId, content: note },
+            { onConflict: 'member_id,lecture_id' }
+          );
+      } catch (err) {
+        console.error('Failed to save member note in Supabase:', err);
+      }
+    }
   };
 
   const setMemberNote = (memberId: string, note: string) => {
@@ -340,62 +655,139 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // --- Drive System Methods ---
-  const addDriveFolder = (folderData: Omit<DriveFolder, 'id' | 'files'>) => {
+  const addDriveFolder = async (folderData: Omit<DriveFolder, 'id' | 'files'>) => {
+    const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : folderData.name || `Folder-${Date.now()}`;
     const newFolder: DriveFolder = {
       ...folderData,
-      id: folderData.name || `Folder-${Date.now()}`,
-      files: []
+      id: tempId,
+      files: [],
     };
-    setDriveFolders(prev => [...prev, newFolder]);
+    setDriveFolders((prev) => [...prev, newFolder]);
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('drive_folders').insert({
+          name: folderData.name,
+          lecture_number: folderData.lectureNumber,
+          date: folderData.date,
+          status: folderData.status,
+          description: folderData.description || '',
+        });
+      } catch (err) {
+        console.error('Failed to add drive folder in Supabase:', err);
+      }
+    }
   };
 
-  const updateDriveFolder = (folderId: string, updates: Partial<DriveFolder>) => {
-    setDriveFolders(prev => prev.map(f => (f.id === folderId ? { ...f, ...updates } : f)));
+  const updateDriveFolder = async (folderId: string, updates: Partial<DriveFolder>) => {
+    setDriveFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, ...updates } : f)));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('drive_folders')
+          .update({
+            name: updates.name,
+            lecture_number: updates.lectureNumber,
+            date: updates.date,
+            status: updates.status,
+            description: updates.description,
+          })
+          .eq('id', folderId);
+      } catch (err) {
+        console.error('Failed to update drive folder in Supabase:', err);
+      }
+    }
   };
 
-  const deleteDriveFolder = (folderId: string) => {
-    setDriveFolders(prev => prev.filter(f => f.id !== folderId));
+  const deleteDriveFolder = async (folderId: string) => {
+    setDriveFolders((prev) => prev.filter((f) => f.id !== folderId));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('drive_folders').delete().eq('id', folderId);
+      } catch (err) {
+        console.error('Failed to delete drive folder in Supabase:', err);
+      }
+    }
   };
 
-  const addDriveFile = (folderId: string, fileData: Omit<DriveFile, 'id' | 'updatedAt'>) => {
+  const addDriveFile = async (folderId: string, fileData: Omit<DriveFile, 'id' | 'updatedAt'>) => {
+    const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'file-' + Date.now();
+    const today = new Date().toISOString().split('T')[0];
     const newFile: DriveFile = {
       ...fileData,
-      id: 'file-' + Date.now(),
-      updatedAt: new Date().toISOString().split('T')[0]
+      id: tempId,
+      updatedAt: today,
     };
-    setDriveFolders(prev => prev.map(f => {
-      if (f.id === folderId) {
-        return {
-          ...f,
-          files: [newFile, ...f.files]
-        };
+
+    setDriveFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, files: [newFile, ...f.files] } : f))
+    );
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('drive_files').insert({
+          folder_id: folderId,
+          name: fileData.name,
+          title: fileData.title,
+          author: fileData.author || null,
+          type: fileData.type,
+          size: fileData.size,
+          size_bytes: fileData.sizeBytes,
+          url: fileData.url,
+          description: fileData.description || null,
+          highlights: fileData.highlights || [],
+        });
+      } catch (err) {
+        console.error('Failed to add drive file in Supabase:', err);
       }
-      return f;
-    }));
+    }
   };
 
-  const updateDriveFile = (folderId: string, fileId: string, updates: Partial<DriveFile>) => {
-    setDriveFolders(prev => prev.map(f => {
-      if (f.id === folderId) {
-        return {
-          ...f,
-          files: f.files.map(file => (file.id === fileId ? { ...file, ...updates } : file))
-        };
+  const updateDriveFile = async (folderId: string, fileId: string, updates: Partial<DriveFile>) => {
+    setDriveFolders((prev) =>
+      prev.map((f) =>
+        f.id === folderId
+          ? {
+              ...f,
+              files: f.files.map((file) => (file.id === fileId ? { ...file, ...updates } : file)),
+            }
+          : f
+      )
+    );
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('drive_files')
+          .update({
+            title: updates.title,
+            author: updates.author,
+            description: updates.description,
+            highlights: updates.highlights,
+          })
+          .eq('id', fileId);
+      } catch (err) {
+        console.error('Failed to update drive file in Supabase:', err);
       }
-      return f;
-    }));
+    }
   };
 
-  const deleteDriveFile = (folderId: string, fileId: string) => {
-    setDriveFolders(prev => prev.map(f => {
-      if (f.id === folderId) {
-        return {
-          ...f,
-          files: f.files.filter(file => file.id !== fileId)
-        };
+  const deleteDriveFile = async (folderId: string, fileId: string) => {
+    setDriveFolders((prev) =>
+      prev.map((f) =>
+        f.id === folderId ? { ...f, files: f.files.filter((file) => file.id !== fileId) } : f
+      )
+    );
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('drive_files').delete().eq('id', fileId);
+      } catch (err) {
+        console.error('Failed to delete drive file in Supabase:', err);
       }
-      return f;
-    }));
+    }
   };
 
   // --- Backup & Restore ---
@@ -407,7 +799,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       tasks,
       memberNotes,
       driveFolders,
-      tags
+      tags,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -444,16 +836,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setMemberNotes({});
     setDriveFolders(DRIVE_FOLDERS);
     setTags(DEFAULT_TAGS);
-    localStorage.removeItem(STORAGE_KEYS.MEMBERS);
-    localStorage.removeItem(STORAGE_KEYS.TASKS);
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V4);
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V3);
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V2);
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS);
-    localStorage.removeItem(STORAGE_KEYS.NOTES);
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_NOTES_V1);
-    localStorage.removeItem(STORAGE_KEYS.DRIVE);
-    localStorage.removeItem(STORAGE_KEYS.TAGS);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.MEMBERS);
+      localStorage.removeItem(STORAGE_KEYS.TASKS);
+      localStorage.removeItem(STORAGE_KEYS.NOTES);
+      localStorage.removeItem(STORAGE_KEYS.DRIVE);
+      localStorage.removeItem(STORAGE_KEYS.TAGS);
+    } catch (e) {}
   };
 
   return (
@@ -467,6 +856,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         theme,
         setTheme,
         toggleTheme,
+        isSupabase: isSupabaseConfigured,
+        syncStatus,
         addTag,
         deleteTag,
         addTask,
@@ -487,7 +878,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteDriveFile,
         exportData,
         importData,
-        resetToDefaults
+        resetToDefaults,
       }}
     >
       {children}
