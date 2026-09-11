@@ -245,15 +245,6 @@ export default function MembersPage() {
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white shadow-sm hover:opacity-90 transition-all cursor-pointer"
-            style={{ backgroundColor: 'var(--accent-blue)' }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Teammate</span>
-          </button>
         </div>
       </div>
 
