@@ -83,18 +83,23 @@ export const normalizeTask = (t: any): Task => {
     ? { ...t.memberStatuses }
     : {};
 
-  const baseTask: Task = {
+  const status: TaskStatus = t.status || 'Backlog';
+
+  // Ensure memberStatuses has entries for all assignees
+  assigneeIds.forEach((mId) => {
+    if (!memberStatuses[mId]) {
+      memberStatuses[mId] = status;
+    }
+  });
+
+  return {
     ...t,
     assigneeIds,
     lectureId,
     tag,
     pillar: tag,
-    memberStatuses
-  };
-
-  return {
-    ...baseTask,
-    status: getTaskOverallStatus(baseTask)
+    memberStatuses,
+    status,
   };
 };
 
@@ -488,31 +493,47 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateTask = async (updatedTask: Task) => {
-    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? normalizeTask(updatedTask) : t)));
+    const targetStatus = updatedTask.status;
+    const synchronizedMemberStatuses: Record<string, TaskStatus> = {
+      ...(updatedTask.memberStatuses || {}),
+    };
+    if (Array.isArray(updatedTask.assigneeIds)) {
+      updatedTask.assigneeIds.forEach((mId) => {
+        synchronizedMemberStatuses[mId] = targetStatus;
+      });
+    }
+
+    const taskToSave: Task = {
+      ...updatedTask,
+      status: targetStatus,
+      memberStatuses: synchronizedMemberStatuses,
+    };
+
+    setTasks((prev) => prev.map((t) => (t.id === taskToSave.id ? taskToSave : t)));
 
     if (isSupabaseConfigured) {
       try {
         await supabase
           .from('tasks')
           .update({
-            title: updatedTask.title,
-            description: updatedTask.description,
-            lecture_id: updatedTask.lectureId,
-            tag: updatedTask.tag,
-            priority: updatedTask.priority,
-            status: updatedTask.status,
-            due_date: updatedTask.dueDate,
+            title: taskToSave.title,
+            description: taskToSave.description,
+            lecture_id: taskToSave.lectureId,
+            tag: taskToSave.tag,
+            priority: taskToSave.priority,
+            status: taskToSave.status,
+            due_date: taskToSave.dueDate,
           })
-          .eq('id', updatedTask.id);
+          .eq('id', taskToSave.id);
 
         // Sync assignees
-        if (updatedTask.assigneeIds) {
-          await supabase.from('task_assignees').delete().eq('task_id', updatedTask.id);
-          if (updatedTask.assigneeIds.length > 0) {
-            const rows = updatedTask.assigneeIds.map((mId) => ({
-              task_id: updatedTask.id,
+        if (taskToSave.assigneeIds) {
+          await supabase.from('task_assignees').delete().eq('task_id', taskToSave.id);
+          if (taskToSave.assigneeIds.length > 0) {
+            const rows = taskToSave.assigneeIds.map((mId) => ({
+              task_id: taskToSave.id,
               member_id: mId,
-              status: updatedTask.memberStatuses?.[mId] || updatedTask.status || 'Backlog',
+              status: taskToSave.memberStatuses?.[mId] || taskToSave.status || 'Backlog',
             }));
             await supabase.from('task_assignees').insert(rows);
           }
@@ -531,7 +552,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ...(t.memberStatuses || {}),
           [memberId]: newStatus,
         };
-        return normalizeTask({ ...t, memberStatuses });
+        const computedOverall = getTaskOverallStatus({ ...t, memberStatuses });
+        return {
+          ...t,
+          memberStatuses,
+          status: computedOverall,
+        };
       })
     );
 
@@ -543,6 +569,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             { task_id: taskId, member_id: memberId, status: newStatus },
             { onConflict: 'task_id,member_id' }
           );
+
+        // Also update task overall status in Supabase
+        const targetTask = tasks.find((t) => t.id === taskId);
+        if (targetTask) {
+          const memberStatuses = {
+            ...(targetTask.memberStatuses || {}),
+            [memberId]: newStatus,
+          };
+          const newOverall = getTaskOverallStatus({ ...targetTask, memberStatuses });
+          if (newOverall !== targetTask.status) {
+            await supabase.from('tasks').update({ status: newOverall }).eq('id', taskId);
+          }
+        }
       } catch (err) {
         console.error('Failed to update assignee status in Supabase:', err);
       }

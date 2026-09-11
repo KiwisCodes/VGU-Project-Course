@@ -130,8 +130,17 @@ This project focuses on building a privacy-preserving, locally deployable clinic
 ### Central Task Hub & Kanban Board (`/tasks`)
 - **Strict Route Protection:** Requires authentication via `AuthGuard`. Unauthenticated visitors are directed to `/login`.
 - **Scoped Lecture Dial:** Minimal dial supporting instant switching between `All ({tasks.length})` and individual lecture sessions (`Lecture 1` through `Lecture 16`).
+- **Smooth Native Drag & Drop Kanban:**
+  - Fluid dragging across all four workflow columns (`Backlog`, `In Progress`, `Review`, `Done`) powered by HTML5 Drag and Drop API.
+  - Responsive visual feedback with active column highlight rings and card drag ghosting.
+  - Click-vs-drag collision prevention: dropping a card cleanly updates its status without accidentally firing card click or opening the edit modal.
+  - Child-element drag protection: member chips, status dropdowns, and edit/delete buttons are guarded so dragging does not trigger unintended column drops.
+- **Smart Task Access Control & Multi-Assignee Sync:**
+  - **Unauthenticated Viewers:** Dragging is disabled with immediate sign-in guidance.
+  - **Shared Team Boards (`/tasks` & `/lectures/[week]`):** All authenticated team members are trusted collaborators and can move tasks across workflow columns. Moving a card synchronously updates overall status and synchronizes all assignees' `memberStatuses` across both local state and Supabase tables (`tasks` and `task_assignees`).
+  - **Personal Member Portals (`/members/[memberId]`):** Only the portal member, task assignees, or Team Leader can update individual progress; other viewers receive a non-intrusive, temporary in-app banner (no disruptive browser `alert()` dialogs).
 - **Dual View Modes:**
-  - **Kanban Board View:** Four workflow columns (`Backlog`, `In Progress`, `Review`, `Done`) with native HTML5 drag-and-drop support.
+  - **Kanban Board View:** Four workflow columns with interactive multi-assignee progress indicators and status shortcuts.
   - **Tabular List View:** High-density table featuring status pickers, priority indicators, and inline action buttons.
 - **Multi-Assignee Support:**
   - Tasks can be assigned to 1 teammate, multiple teammates, or the entire team via the 1-click `All ({members.length})` shortcut.
@@ -442,17 +451,31 @@ sequenceDiagram
     autonumber
     actor User as Team Member
     participant UI as TasksPage / TaskModal
+    participant KB as KanbanBoard
+    participant Auth as AuthContext
     participant Ctx as ProjectContext
-    participant SB as Supabase (tasks)
-    participant Views as Kanban & Member Portals
+    participant SB as Supabase (tasks, task_assignees)
 
     User->>UI: Click "Add Task" & fill details
     User->>UI: Select assignees (single or "All")
     UI->>Ctx: addTask({ title, description, assigneeIds, lectureId, tag, priority })
     Ctx->>SB: Insert into 'tasks' & 'task_assignees'
     Ctx->>Ctx: Update reactive tasks array
-    Ctx-->>Views: Broadcast state update
-    Views-->>User: Task appears in Backlog on Kanban & Teammate portals
+    Ctx-->>KB: Render task cards in Backlog
+    
+    Note over User,KB: Drag & Drop with Smart Access Control
+    User->>KB: Drag task card to "In Progress" column
+    KB->>Auth: canMoveTask(task, portalMemberId)
+    alt Unauthorized Attempt (Unauthenticated or Disallowed Portal)
+        Auth-->>KB: { allowed: false, reason: "Permission denied / sign in required" }
+        KB-->>User: Show temporary in-app notice banner (no browser alert)
+    else Authorized Team Move
+        Auth-->>KB: { allowed: true }
+        KB->>Ctx: updateTask({ ...task, status: 'In Progress' })
+        Ctx->>Ctx: Synchronize overall status & all assignees' memberStatuses
+        Ctx->>SB: Update tasks table & task_assignees records
+        Ctx-->>KB: Card smoothly settles in target column without reverting
+    end
 ```
 
 ---

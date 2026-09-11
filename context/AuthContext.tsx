@@ -34,6 +34,7 @@ interface AuthContextType {
   clearError: () => void;
   canEditNote: (targetMemberId: string) => boolean;
   canEditTaskStatus: (targetMemberId: string) => boolean;
+  canMoveTask: (task: { assigneeIds?: string[] }, portalMemberId?: string) => { allowed: boolean; reason?: string };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -265,14 +266,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Permission helper: only the author or team leader can edit a note
   const canEditNote = (targetMemberId: string): boolean => {
-    if (!profile) return false;
-    return profile.id === targetMemberId || profile.is_team_leader;
+    if (!user) return false;
+    if (profile?.is_team_leader) return true;
+    return (profile && profile.id === targetMemberId) || user.id === targetMemberId;
   };
 
   // Permission helper: only the assignee or team leader can change their own progress
   const canEditTaskStatus = (targetMemberId: string): boolean => {
-    if (!profile) return false;
-    return profile.id === targetMemberId || profile.is_team_leader;
+    if (!user) return false;
+    if (profile?.is_team_leader) return true;
+    return (profile && profile.id === targetMemberId) || user.id === targetMemberId;
+  };
+
+  // Smart Task Access Permission helper:
+  // - Unauthenticated users cannot move tasks
+  // - Team Leader can move any task on any board
+  // - On shared boards (no portalMemberId), any authenticated team member can drag tasks
+  // - On personal portals (portalMemberId provided), only that member, task assignees, or Team Leader can move tasks
+  const canMoveTask = (task: { assigneeIds?: string[] }, portalMemberId?: string): { allowed: boolean; reason?: string } => {
+    if (!user) {
+      return { allowed: false, reason: 'Authentication required: please sign in to move tasks.' };
+    }
+    if (profile?.is_team_leader) {
+      return { allowed: true };
+    }
+    if (portalMemberId && portalMemberId !== 'all') {
+      const isOwnPortal = (profile && profile.id === portalMemberId) || user.id === portalMemberId;
+      const isAssignee = Array.isArray(task.assigneeIds) && (
+        (profile && task.assigneeIds.includes(profile.id)) || task.assigneeIds.includes(user.id)
+      );
+      if (isOwnPortal || isAssignee) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: 'Personal portal: Only this member, task assignees, or Team Leader can modify deliverables here.'
+      };
+    }
+    // Shared boards (/tasks, /lectures): All authenticated team members are trusted collaborators
+    return { allowed: true };
   };
 
   return (
@@ -291,6 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearError,
         canEditNote,
         canEditTaskStatus,
+        canMoveTask,
       }}
     >
       {children}
