@@ -126,7 +126,8 @@ export default function MembersPage() {
     avatarBg: AVATAR_COLORS[0],
     initials: '',
     bio: '',
-    skillsString: ''
+    skillsString: '',
+    isTeamLeader: false,
   });
 
   const openCreateModal = () => {
@@ -139,7 +140,8 @@ export default function MembersPage() {
       avatarBg: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
       initials: '',
       bio: '',
-      skillsString: ''
+      skillsString: '',
+      isTeamLeader: false,
     });
     setIsModalOpen(true);
   };
@@ -154,7 +156,8 @@ export default function MembersPage() {
       avatarBg: member.avatarBg,
       initials: member.initials,
       bio: member.bio,
-      skillsString: member.skills.join(', ')
+      skillsString: member.skills.join(', '),
+      isTeamLeader: Boolean(member.isTeamLeader),
     });
     setIsModalOpen(true);
   };
@@ -182,7 +185,8 @@ export default function MembersPage() {
           avatarBg: formData.avatarBg,
           initials,
           bio: formData.bio,
-          skills
+          skills,
+          isTeamLeader: formData.isTeamLeader,
         });
       }
     } else {
@@ -194,7 +198,8 @@ export default function MembersPage() {
         avatarBg: formData.avatarBg,
         initials,
         bio: formData.bio,
-        skills
+        skills,
+        isTeamLeader: formData.isTeamLeader,
       });
     }
     setIsModalOpen(false);
@@ -297,6 +302,11 @@ export default function MembersPage() {
                         <h3 className="font-extrabold text-sm" style={{ color: 'var(--text-main)' }}>
                           {member.name}
                         </h3>
+                        {member.isTeamLeader && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
+                            ★ Team Leader
+                          </span>
+                        )}
                         {member.studentId && (
                           <span 
                             className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md border" 
@@ -850,6 +860,19 @@ export default function MembersPage() {
                     color: 'var(--text-main)'
                   }}
                 />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-lg border bg-slate-50 dark:bg-slate-900/40" style={{ borderColor: 'var(--border-subtle)' }}>
+                <input
+                  type="checkbox"
+                  id="modalIsTeamLeader"
+                  checked={formData.isTeamLeader}
+                  onChange={(e) => setFormData({ ...formData, isTeamLeader: e.target.checked })}
+                  className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="modalIsTeamLeader" className="text-xs font-bold cursor-pointer" style={{ color: 'var(--text-main)' }}>
+                  Designate as Team Leader
+                </label>
               </div>
 
               <div>

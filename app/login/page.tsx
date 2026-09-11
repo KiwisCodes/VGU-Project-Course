@@ -238,7 +238,7 @@ function LoginFormContent() {
 
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                VGU Student Email or ID
+                Student ID, VGU Email, or Gmail
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -247,12 +247,12 @@ function LoginFormContent() {
                   required
                   value={usernameOrEmail}
                   onChange={(e) => setUsernameOrEmail(e.target.value)}
-                  placeholder="10423057 or 10423057@student.vgu.edu.vn"
+                  placeholder="Student ID (e.g. 10423057), VGU email, or Gmail"
                   className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#121217] text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Tip: You can just type your Student ID. Domain is auto-appended.
+                Tip: Enter your Student ID (auto-completed to @student.vgu.edu.vn) or your full VGU / Google Workspace email.
               </span>
             </div>
 

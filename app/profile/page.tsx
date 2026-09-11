@@ -27,6 +27,7 @@ export default function ProfilePage() {
   const [bio, setBio] = useState('');
   const [skills, setSkills] = useState('');
   const [avatarBg, setAvatarBg] = useState('#2563eb');
+  const [isLeader, setIsLeader] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
 
@@ -40,6 +41,7 @@ export default function ProfilePage() {
       setBio(profile.bio || '');
       setSkills(Array.isArray(profile.skills) ? profile.skills.join(', ') : '');
       setAvatarBg(profile.avatar_bg || '#2563eb');
+      setIsLeader(Boolean(profile.is_team_leader));
     }
   }, [profile]);
 
@@ -69,6 +71,7 @@ export default function ProfilePage() {
       skills: skillsArray,
       avatar_bg: avatarBg,
       initials,
+      is_team_leader: isLeader,
     };
 
     const { error } = await updateProfile(updates);
@@ -87,6 +90,7 @@ export default function ProfilePage() {
           skills: skillsArray,
           avatarBg,
           initials,
+          isTeamLeader: isLeader,
         });
       }
     }
@@ -114,7 +118,7 @@ export default function ProfilePage() {
             href="/login"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all shadow-sm"
           >
-            Sign in with Google
+            Sign In to Hub
           </Link>
         </div>
       </div>
@@ -146,9 +150,13 @@ export default function ProfilePage() {
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">
                 {name || 'Team Member'}
               </h1>
-              {profile?.is_team_leader && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
-                  Team Leader
+              {isLeader ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                  <span>★</span> Team Leader
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  Team Member
                 </span>
               )}
             </div>
@@ -228,14 +236,48 @@ export default function ProfilePage() {
           {/* Email (read-only) */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              VGU Email Address (Linked Google Account)
+              Registered Account Email
             </label>
             <input
               type="email"
               value={profile?.email || user?.email || ''}
               disabled
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-[#181820] text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-[#181820] text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed font-mono"
             />
+            <span className="text-[10px] text-slate-400 mt-1 block">
+              Resolved from your login credentials. Student ID can be updated in the field above.
+            </span>
+          </div>
+
+          {/* Team Leader Toggle Switch */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#121217]">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="teamLeaderToggle" className="text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
+                    Team Leader Role
+                  </label>
+                  {isLeader && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
+                      Active Leader
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Toggle to designate yourself as Team Leader for this project group. Enables administrative permissions for task status coordination.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  id="teamLeaderToggle"
+                  checked={isLeader}
+                  onChange={(e) => setIsLeader(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
           </div>
 
           {/* Bio */}

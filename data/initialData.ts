@@ -11,7 +11,7 @@ export const INITIAL_MEMBERS: Member[] = [
     initials: 'TH',
     bio: '',
     skills: [],
-    isTeamLeader: true,
+    isTeamLeader: false,
   },
   {
     id: 'bd5941a6-c419-43fe-a550-eb2de5cf9336',

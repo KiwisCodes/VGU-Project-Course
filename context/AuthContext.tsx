@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useTransition } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { resolveUserIdentifier, VGU_STUDENT_DOMAIN } from '@/lib/authUtils';
 
 export interface UserProfile {
   id: string;
@@ -37,7 +38,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const VGU_EMAIL_DOMAIN = '@student.vgu.edu.vn';
+export const VGU_EMAIL_DOMAIN = `@${VGU_STUDENT_DOMAIN}`;
 export const TEAM_SECRET_KEY = '676767';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -53,15 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = async (authUser: User) => {
     if (!isSupabaseConfigured) return null;
     try {
-      // Check domain
-      if (authUser.email && !authUser.email.toLowerCase().endsWith(VGU_EMAIL_DOMAIN)) {
-        await supabase.auth.signOut();
-        setUser(null);
-        setProfile(null);
-        setErrorMessage(`Access restricted: Please sign in with your official VGU institutional account (${VGU_EMAIL_DOMAIN}).`);
-        return null;
-      }
-
       // First query by auth_user_id
       let { data } = await supabase
         .from('profiles')
@@ -85,11 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data = { ...emailMatch, auth_user_id: authUser.id };
         } else {
           const fallbackName = (authUser.user_metadata?.full_name as string) || authUser.email.split('@')[0];
+          const resolved = resolveUserIdentifier(authUser.email);
+          const metadataStudentId = (authUser.user_metadata?.student_id as string) || resolved.studentId || '';
+
           const newProfile = {
             auth_user_id: authUser.id,
             name: fallbackName,
             email: authUser.email,
-            student_id: authUser.email.split('@')[0],
+            student_id: metadataStudentId,
             initials: fallbackName.slice(0, 2).toUpperCase(),
             role: '',
             bio: '',
@@ -164,19 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: new Error('Supabase is not configured.') };
     }
     clearError();
-    let cleanEmail = usernameOrEmail.trim().toLowerCase();
-    // Allow typing student ID (e.g. 10423057) or full email
-    if (!cleanEmail.includes('@')) {
-      cleanEmail = `${cleanEmail}${VGU_EMAIL_DOMAIN}`;
-    }
 
-    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
-      return { error: new Error(`Access restricted: Please use your official VGU student account (${VGU_EMAIL_DOMAIN}).`) };
+    const identity = resolveUserIdentifier(usernameOrEmail);
+    if (!identity.email) {
+      return { error: new Error('Please enter your Student ID, VGU email, or Gmail address.') };
     }
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
+        email: identity.email,
         password,
       });
       if (error) return { error: new Error(error.message) };
@@ -191,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpWithEmail = async (
-    email: string,
+    emailOrId: string,
     password: string,
     name: string,
     secretKey: string
@@ -208,23 +199,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    let cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail.includes('@')) {
-      cleanEmail = `${cleanEmail}${VGU_EMAIL_DOMAIN}`;
-    }
-
-    if (!cleanEmail.endsWith(VGU_EMAIL_DOMAIN)) {
+    const identity = resolveUserIdentifier(emailOrId);
+    if (!identity.email) {
       return {
-        error: new Error(`Access restricted: Only official VGU student emails (${VGU_EMAIL_DOMAIN}) are allowed.`),
+        error: new Error('Please enter a valid Student ID, VGU email, or Gmail address.'),
       };
     }
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
+        email: identity.email,
         password,
         options: {
-          data: { full_name: name.trim() },
+          data: {
+            full_name: name.trim(),
+            student_id: identity.studentId || '',
+          },
         },
       });
       if (error) return { error: new Error(error.message) };

@@ -110,6 +110,7 @@ function mapDbProfileToMember(row: any): Member {
     initials: row.initials || (row.name ? row.name.slice(0, 2).toUpperCase() : 'U'),
     bio: row.bio || '',
     skills: Array.isArray(row.skills) ? row.skills : [],
+    isTeamLeader: Boolean(row.is_team_leader),
   };
 }
 
@@ -578,6 +579,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           initials: memberData.initials,
           bio: memberData.bio,
           skills: memberData.skills,
+          is_team_leader: Boolean(memberData.isTeamLeader),
         });
       } catch (err) {
         console.error('Failed to add member to Supabase:', err);
@@ -601,6 +603,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             initials: updatedMember.initials,
             bio: updatedMember.bio,
             skills: updatedMember.skills,
+            is_team_leader: Boolean(updatedMember.isTeamLeader),
           })
           .eq('id', updatedMember.id);
       } catch (err) {
