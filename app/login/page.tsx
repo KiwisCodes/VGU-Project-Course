@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, TEAM_SECRET_KEY } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { KeyRound, Lock, User, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
 
-const TEAM_MEMBERS = [
-  { name: 'Le Quang Minh Khoa', email: '10423057@student.vgu.edu.vn', role: 'Team Leader & ML Architect' },
-  { name: 'Nguyen Vo Minh Khoi', email: '10423063@student.vgu.edu.vn', role: 'Clinical Data & Pipeline Engineer' },
-  { name: 'Nguyen Duc Khang', email: '10423054@student.vgu.edu.vn', role: 'Vision-Language & PEFT Engineer' },
-  { name: 'Phan Thanh Hung', email: '10423051@student.vgu.edu.vn', role: 'RAG & Medical Knowledge Graph Specialist' },
-  { name: 'Duong Quy Trang', email: '10423110@student.vgu.edu.vn', role: 'Multi-Agent & Clinical Evaluation Engineer' },
-];
+interface RegisteredUser {
+  name: string;
+  email: string;
+  studentId: string;
+  isTester?: boolean;
+}
 
 function LoginFormContent() {
   const {
@@ -80,9 +80,53 @@ function LoginFormContent() {
     setSubmitting(false);
   };
 
-  const handleSelectMember = (memberEmail: string, memberName: string) => {
-    setUsernameOrEmail(memberEmail);
-    setFullName(memberName);
+  const [registeredMembers, setRegisteredMembers] = useState<RegisteredUser[]>([
+    {
+      name: 'Tester',
+      email: '0001@student.vgu.edu.vn',
+      studentId: '0001',
+      isTester: true,
+    },
+  ]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+
+  useEffect(() => {
+    async function loadRegisteredMembers() {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('name, email, student_id, auth_user_id')
+          .not('auth_user_id', 'is', null)
+          .order('name');
+
+        if (data && data.length > 0) {
+          setRegisteredMembers(
+            data.map((p) => ({
+              name: p.name,
+              email: p.email,
+              studentId: p.student_id || p.email.split('@')[0],
+              isTester: p.student_id === '0001' || p.email.startsWith('0001@'),
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Error fetching registered members:', err);
+      } finally {
+        setLoadingMembers(false);
+      }
+    }
+
+    loadRegisteredMembers();
+  }, []);
+
+  const handleSelectMember = (m: RegisteredUser) => {
+    setUsernameOrEmail(m.studentId);
+    setFullName(m.name);
+    if (m.isTester) {
+      setPassword('123456');
+    } else {
+      setPassword('');
+    }
     setFormError(null);
   };
 
@@ -259,25 +303,45 @@ function LoginFormContent() {
             </button>
           </form>
 
-          {/* Quick Member Selection for Instant Fill */}
+          {/* Quick Member Selection for Registered Accounts */}
           <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800/80 text-left">
-            <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1.5">
-              Quick Select Team Member (Auto-fill):
-            </p>
-            <div className="space-y-1">
-              {TEAM_MEMBERS.map((m) => (
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                Registered Accounts (Auto-fill):
+              </p>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {registeredMembers.length} available
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {registeredMembers.map((m) => (
                 <button
                   type="button"
                   key={m.email}
-                  onClick={() => handleSelectMember(m.email, m.name)}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left text-xs transition-colors cursor-pointer"
+                  onClick={() => handleSelectMember(m)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/60 hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left text-xs transition-all cursor-pointer group"
                 >
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                    {m.name}
-                  </span>
-                  <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400 ml-2 shrink-0">
-                    {m.email.split('@')[0]}
-                  </span>
+                  <div className="flex items-center gap-2 truncate">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${m.isTester ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {m.name}
+                    </span>
+                    {m.isTester && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60 shrink-0">
+                        Tester
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {m.isTester && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                        pass: 123456
+                      </span>
+                    )}
+                    <span className="font-mono text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md">
+                      {m.studentId}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
