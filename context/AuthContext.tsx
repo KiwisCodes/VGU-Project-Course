@@ -134,6 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       });
+    }).catch((err) => {
+      console.error('getSession error:', err);
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
     });
 
     // Listen to auth changes

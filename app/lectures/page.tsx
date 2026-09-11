@@ -4,11 +4,28 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { LECTURE_SESSIONS } from '@/data/initialData';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { BookOpen, Calendar, ArrowRight, FileText, CheckCircle2, Folder, CheckSquare, Layers } from 'lucide-react';
 
 export default function LecturesPage() {
   const { driveFolders, tasks } = useProject();
+  const { user, loading } = useAuth();
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+          Checking access permissions...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   const filteredLectures = phaseFilter === 'all'
     ? LECTURE_SESSIONS

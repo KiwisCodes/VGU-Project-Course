@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { DriveFolder, DriveFile } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
@@ -39,11 +40,27 @@ export default function MaterialsPage() {
     updateDriveFile, 
     deleteDriveFile 
   } = useProject();
+  const { user, loading } = useAuth();
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [notification, setNotification] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+          Checking access permissions...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   // Modals state
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);

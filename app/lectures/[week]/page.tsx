@@ -91,13 +91,28 @@ export default function LectureDetailPage({ params }: { params: Promise<{ week: 
   const padNum = String(weekNum).padStart(2, '0');
 
   const { driveFolders, addDriveFile, updateDriveFile, deleteDriveFile, addDriveFolder } = useProject();
-  const { profile } = useAuth();
+  const { profile, user, loading } = useAuth();
   const activeFolder = driveFolders.find(
     f => f.lectureNumber === weekNum || f.name.includes(`Lecture_${padNum}`)
   );
 
   // File management modal & form state
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+          Checking access permissions...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
   const [editingFile, setEditingFile] = useState<DriveFile | null>(null);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);

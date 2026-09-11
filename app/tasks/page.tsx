@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { Task, TaskStatus, Priority, getTaskMemberStatus, isTaskDoneForMember } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
@@ -28,6 +29,7 @@ const TOTAL_LECTURES = 16;
 
 function TasksContent() {
   const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
+  const { user, loading } = useAuth();
 
   const searchParams = useSearchParams();
   const lectureParam = searchParams.get('lecture');
@@ -40,6 +42,21 @@ function TasksContent() {
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+          Checking access permissions...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   // Sync with searchParams if changed
   useEffect(() => {

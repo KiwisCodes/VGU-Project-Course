@@ -44,10 +44,25 @@ export default function MembersPage() {
     getMemberLectureNote, 
     setMemberLectureNote 
   } = useProject();
-  const { canEditNote, isTeamLeader } = useAuth();
+  const { user, loading, canEditNote, isTeamLeader } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+          Checking access permissions...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   // Central Notes Hub state (1 note per lecture per member)
   const [selectedNoteLecture, setSelectedNoteLecture] = useState<number>(1);
