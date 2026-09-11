@@ -39,12 +39,60 @@ export interface Task {
   tag: string;           // Dynamic tag category (formerly pillar)
   priority: Priority;
   status: TaskStatus;
+  memberStatuses?: Record<string, TaskStatus>; // Per-member individual status overrides
   dueDate: string;
   createdAt: string;
   // Backward compatibility fields
   pillar?: string;
   assigneeId?: string;
   week?: number;
+}
+
+/**
+ * Returns the individual status for a specific member on a task.
+ * Falls back to the task's base status if no override is recorded.
+ */
+export function getTaskMemberStatus(task: Task, memberId: string): TaskStatus {
+  if (task.memberStatuses && task.memberStatuses[memberId]) {
+    return task.memberStatuses[memberId];
+  }
+  return task.status;
+}
+
+/**
+ * Returns true if the task is marked as Done for the specific member.
+ */
+export function isTaskDoneForMember(task: Task, memberId: string): boolean {
+  return getTaskMemberStatus(task, memberId) === 'Done';
+}
+
+/**
+ * Determines the overall status of a task:
+ * - If 0 or 1 assignee: returns the task/member status.
+ * - If multiple assignees:
+ *   - 'Done' if ALL assignees marked it Done.
+ *   - 'Backlog' if ALL assignees have it in Backlog.
+ *   - 'Review' if ANY assignee has it in Review and none are in Backlog/In Progress.
+ *   - 'In Progress' if at least one assignee has it In Progress (or some Done, some In Progress).
+ */
+export function getTaskOverallStatus(task: Task): TaskStatus {
+  const assignees = Array.isArray(task.assigneeIds)
+    ? task.assigneeIds
+    : (task.assigneeId ? [task.assigneeId] : []);
+
+  if (assignees.length === 0) {
+    return task.status;
+  }
+
+  if (assignees.length === 1) {
+    return getTaskMemberStatus(task, assignees[0]);
+  }
+
+  const statuses = assignees.map(mId => getTaskMemberStatus(task, mId));
+  if (statuses.every(s => s === 'Done')) return 'Done';
+  if (statuses.every(s => s === 'Backlog')) return 'Backlog';
+  if (statuses.some(s => s === 'Review') && statuses.every(s => s === 'Review' || s === 'Done')) return 'Review';
+  return 'In Progress';
 }
 
 export interface MemberNote {

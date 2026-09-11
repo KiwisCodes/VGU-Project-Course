@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Task, TaskStatus, Priority, PillarTag, Member, getMemberShortName } from '@/types';
+import { Task, TaskStatus, Priority, Member, getMemberShortName, getTaskMemberStatus, getTaskOverallStatus } from '@/types';
 import { 
   CheckSquare, 
   Clock, 
@@ -20,6 +20,9 @@ interface KanbanBoardProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   onCreateTaskInStatus?: (status: TaskStatus) => void;
+  currentMemberId?: string;
+  activeAssigneeFilter?: string;
+  onUpdateMemberTaskStatus?: (taskId: string, memberId: string, status: TaskStatus) => void;
 }
 
 const STATUSES: TaskStatus[] = ['Backlog', 'In Progress', 'Review', 'Done'];
@@ -30,10 +33,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onUpdateTask,
   onEditTask,
   onDeleteTask,
-  onCreateTaskInStatus
+  onCreateTaskInStatus,
+  currentMemberId,
+  activeAssigneeFilter,
+  onUpdateMemberTaskStatus
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+
+  const targetMemberId = currentMemberId || (activeAssigneeFilter && activeAssigneeFilter !== 'all' ? activeAssigneeFilter : undefined);
+
+  const getTaskStatusForView = (task: Task): TaskStatus => {
+    if (targetMemberId) {
+      return getTaskMemberStatus(task, targetMemberId);
+    }
+    return task.status;
+  };
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     setDraggedTaskId(taskId);
@@ -63,7 +78,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!taskId) return;
 
     const task = tasks.find(t => t.id === taskId);
-    if (task && task.status !== targetStatus) {
+    if (!task) return;
+
+    if (targetMemberId && onUpdateMemberTaskStatus) {
+      const currentMemberStatus = getTaskMemberStatus(task, targetMemberId);
+      if (currentMemberStatus !== targetStatus) {
+        onUpdateMemberTaskStatus(task.id, targetMemberId, targetStatus);
+      }
+    } else if (task.status !== targetStatus) {
       onUpdateTask({
         ...task,
         status: targetStatus
@@ -151,7 +173,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
       {STATUSES.map(status => {
-        const columnTasks = tasks.filter(t => t.status === status);
+        const columnTasks = tasks.filter(t => getTaskStatusForView(t) === status);
         const isColumnDragOver = dragOverStatus === status;
 
         return (
@@ -228,9 +250,71 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     <h4 className="font-bold text-xs leading-snug mb-1" style={{ color: 'var(--text-main)' }}>
                       {task.title}
                     </h4>
-                    <p className="text-[11px] line-clamp-2 leading-relaxed mb-3" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-[11px] line-clamp-2 leading-relaxed mb-2" style={{ color: 'var(--text-muted)' }}>
                       {task.description}
                     </p>
+
+                    {/* Member Completion Progress & Interactive Chips (for multi-assignee tasks) */}
+                    {assigneeList.length > 1 && (
+                      <div 
+                        className="my-2 p-2 rounded-lg border bg-slate-50/60 dark:bg-slate-900/40" 
+                        style={{ borderColor: 'var(--border-subtle)' }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                          <span className="flex items-center gap-1">
+                            <CheckSquare className="w-3 h-3 text-slate-400" />
+                            <span>Member Progress</span>
+                          </span>
+                          <span className={assigneeList.every(mId => getTaskMemberStatus(task, mId) === 'Done') ? 'text-emerald-500 font-extrabold' : 'text-blue-500 font-extrabold'}>
+                            {assigneeList.filter(mId => getTaskMemberStatus(task, mId) === 'Done').length}/{assigneeList.length} Done
+                          </span>
+                        </div>
+
+                        {/* Mini Progress Bar */}
+                        <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden mb-2">
+                          <div 
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              assigneeList.every(mId => getTaskMemberStatus(task, mId) === 'Done') ? 'bg-emerald-500' : 'bg-blue-500'
+                            }`}
+                            style={{ 
+                              width: `${Math.round((assigneeList.filter(mId => getTaskMemberStatus(task, mId) === 'Done').length / assigneeList.length) * 100)}%` 
+                            }}
+                          />
+                        </div>
+
+                        {/* Interactive Member Status Chips */}
+                        <div className="flex flex-wrap gap-1">
+                          {assigneeList.map(mId => {
+                            const member = members.find(m => m.id === mId);
+                            if (!member) return null;
+                            const isDone = getTaskMemberStatus(task, mId) === 'Done';
+                            const shortName = getMemberShortName(member.name);
+                            return (
+                              <button
+                                key={mId}
+                                type="button"
+                                title={`${member.name}: ${isDone ? 'Done (Click to mark In Progress)' : 'In Progress (Click to mark Done)'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onUpdateMemberTaskStatus) {
+                                    onUpdateMemberTaskStatus(task.id, mId, isDone ? 'In Progress' : 'Done');
+                                  }
+                                }}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                                  isDone 
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                                    : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDone ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                <span>{isDone ? `✓ ${shortName}` : shortName}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Footer: Assignees, Lecture Badge, Due Date */}
                     <div className="pt-2 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -256,9 +340,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       onClick={e => e.stopPropagation()}
                     >
                       <select
-                        value={task.status}
-                        onChange={(e) => onUpdateTask({ ...task, status: e.target.value as TaskStatus })}
-                        className="text-[10px] font-bold py-0.5 px-1.5 rounded border"
+                        value={targetMemberId ? getTaskMemberStatus(task, targetMemberId) : task.status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as TaskStatus;
+                          if (targetMemberId && onUpdateMemberTaskStatus) {
+                            onUpdateMemberTaskStatus(task.id, targetMemberId, newStatus);
+                          } else {
+                            onUpdateTask({ ...task, status: newStatus });
+                          }
+                        }}
+                        className="text-[10px] font-bold py-0.5 px-1.5 rounded border cursor-pointer"
                         style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}
                       >
                         {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}

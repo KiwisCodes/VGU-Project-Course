@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
-import { Task, TaskStatus, Priority } from '@/types';
+import { Task, TaskStatus, Priority, getTaskMemberStatus, isTaskDoneForMember } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TagManagerModal } from '@/components/TagManagerModal';
@@ -13,13 +13,13 @@ import {
   CheckSquare, 
   Trash2, 
   Edit3, 
-  X,
-  List,
-  Columns,
-  Users2,
-  Zap,
-  UserCheck,
-  Tag as TagIcon
+  X, 
+  List, 
+  Columns, 
+  Users2, 
+  Zap, 
+  UserCheck, 
+  Tag as TagIcon 
 } from 'lucide-react';
 
 const STATUSES: TaskStatus[] = ['Backlog', 'In Progress', 'Review', 'Done'];
@@ -27,7 +27,7 @@ const PRIORITIES: Priority[] = ['High', 'Medium', 'Low'];
 const TOTAL_LECTURES = 16;
 
 function TasksContent() {
-  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask } = useProject();
+  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
 
   const searchParams = useSearchParams();
   const lectureParam = searchParams.get('lecture');
@@ -419,6 +419,8 @@ function TasksContent() {
             onEditTask={openEditModal}
             onDeleteTask={deleteTask}
             onCreateTaskInStatus={openCreateModal}
+            activeAssigneeFilter={selectedAssignee}
+            onUpdateMemberTaskStatus={setMemberTaskStatus}
           />
         )
       ) : (
@@ -442,6 +444,8 @@ function TasksContent() {
                   const taskLecture = task.lectureId || task.week || 1;
                   const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
                   const assignedMembers = members.filter(m => assigneeList.includes(m.id));
+                  const isSpecificMember = selectedAssignee !== 'all';
+                  const displayStatus = isSpecificMember ? getTaskMemberStatus(task, selectedAssignee) : task.status;
 
                   return (
                     <tr 
@@ -451,13 +455,20 @@ function TasksContent() {
                     >
                       <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                         <select
-                          value={task.status}
-                          onChange={(e) => updateTask({ ...task, status: e.target.value as TaskStatus })}
+                          value={displayStatus}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as TaskStatus;
+                            if (isSpecificMember) {
+                              setMemberTaskStatus(task.id, selectedAssignee, newStatus);
+                            } else {
+                              updateTask({ ...task, status: newStatus });
+                            }
+                          }}
                           className="text-xs font-bold py-1 px-2 rounded-lg border cursor-pointer"
                           style={{
                             borderColor: 'var(--border-subtle)',
                             backgroundColor: 'var(--bg-surface-elevated)',
-                            color: task.status === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
+                            color: displayStatus === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
                           }}
                         >
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -489,16 +500,21 @@ function TasksContent() {
 
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1">
-                          {assignedMembers.map(m => (
-                            <span 
-                              key={m.id}
-                              title={m.name}
-                              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
-                              style={{ backgroundColor: m.avatarBg }}
-                            >
-                              {m.initials}
-                            </span>
-                          ))}
+                          {assignedMembers.map(m => {
+                            const isDone = isTaskDoneForMember(task, m.id);
+                            return (
+                              <span 
+                                key={m.id}
+                                title={`${m.name} (${isDone ? 'Done' : 'In Progress'})`}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs transition-transform ${
+                                  isDone ? 'ring-2 ring-emerald-500' : 'opacity-70'
+                                }`}
+                                style={{ backgroundColor: m.avatarBg }}
+                              >
+                                {m.initials}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
 

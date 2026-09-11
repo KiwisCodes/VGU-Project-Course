@@ -4,7 +4,7 @@ import React, { useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
-import { Task, TaskStatus, Priority } from '@/types';
+import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TagManagerModal } from '@/components/TagManagerModal';
@@ -49,7 +49,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     getMemberLectureNote, 
     addTask, 
     updateTask, 
-    deleteTask 
+    deleteTask,
+    setMemberTaskStatus
   } = useProject();
 
   const member = members.find(m => m.id === unwrappedParams.memberId);
@@ -118,8 +119,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     Array.isArray(t.assigneeIds) ? t.assigneeIds.includes(member.id) : t.assigneeId === member.id
   );
 
-  const doneTasks = memberTasks.filter(t => t.status === 'Done');
-  const activeTasks = memberTasks.filter(t => t.status === 'In Progress');
+  const doneTasks = memberTasks.filter(t => isTaskDoneForMember(t, member.id));
+  const activeTasks = memberTasks.filter(t => getTaskMemberStatus(t, member.id) === 'In Progress');
   const pct = memberTasks.length > 0 ? Math.round((doneTasks.length / memberTasks.length) * 100) : 0;
 
   // Filter by currently selected lecture
@@ -173,7 +174,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
       lectureId: task.lectureId || task.week || 1,
       tag: task.tag || task.pillar || 'Data Engineering',
       priority: task.priority,
-      status: task.status,
+      status: getTaskMemberStatus(task, member.id),
       dueDate: task.dueDate
     });
     setIsModalOpen(true);
@@ -198,10 +199,13 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     if (editingTaskId) {
       const existing = tasks.find(t => t.id === editingTaskId);
       if (existing) {
+        const memberStatuses = existing.memberStatuses ? { ...existing.memberStatuses } : {};
+        memberStatuses[member.id] = formData.status;
         updateTask({
           ...existing,
           ...formData,
-          pillar: formData.tag
+          pillar: formData.tag,
+          memberStatuses
         });
       }
     } else {
@@ -397,6 +401,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
             onEditTask={openEditModal}
             onDeleteTask={deleteTask}
             onCreateTaskInStatus={openCreateModal}
+            currentMemberId={member.id}
+            onUpdateMemberTaskStatus={setMemberTaskStatus}
           />
         ) : (
           <div className="bento-card overflow-hidden">
@@ -412,7 +418,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
-                  {filteredMemberTasks.map(task => (
+                  {filteredMemberTasks.map(task => {
+                    const memberStatus = getTaskMemberStatus(task, member.id);
+                    return (
                     <tr 
                       key={task.id}
                       onClick={() => openEditModal(task)}
@@ -420,13 +428,13 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                     >
                       <td className="py-2.5 px-3" onClick={e => e.stopPropagation()}>
                         <select
-                          value={task.status}
-                          onChange={(e) => updateTask({ ...task, status: e.target.value as TaskStatus })}
+                          value={memberStatus}
+                          onChange={(e) => setMemberTaskStatus(task.id, member.id, e.target.value as TaskStatus)}
                           className="text-xs font-bold py-0.5 px-1.5 rounded border cursor-pointer"
                           style={{
                             borderColor: 'var(--border-subtle)',
                             backgroundColor: 'var(--bg-surface-elevated)',
-                            color: task.status === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
+                            color: memberStatus === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
                           }}
                         >
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -449,7 +457,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                         {task.dueDate}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

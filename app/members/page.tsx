@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/context/ProjectContext';
-import { Member, getMemberShortName } from '@/types';
+import { Member, getMemberShortName, isTaskDoneForMember } from '@/types';
 import { 
   Users, 
   Plus, 
@@ -265,7 +265,7 @@ export default function MembersPage() {
             if (mWeek === 'all') return true;
             return (t.lectureId || t.week || 1) === mWeek;
           });
-          const doneTasks = memberTasks.filter(t => t.status === 'Done').length;
+          const doneTasks = memberTasks.filter(t => isTaskDoneForMember(t, member.id)).length;
           const pct = memberTasks.length > 0 ? Math.round((doneTasks / memberTasks.length) * 100) : 0;
           const shortName = getMemberShortName(member.name);
 

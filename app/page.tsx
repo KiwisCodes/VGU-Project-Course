@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/context/ProjectContext';
-import { getMemberShortName } from '@/types';
+import { getMemberShortName, isTaskDoneForMember } from '@/types';
 import { 
   CheckCircle2, 
   Clock, 
@@ -31,7 +31,22 @@ export default function DashboardPage() {
   const completedTasks = tasks.filter(t => t.status === 'Done').length;
   const inProgressTasks = tasks.filter(t => t.status === 'In Progress').length;
   const reviewTasks = tasks.filter(t => t.status === 'Review').length;
-  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  let totalObligations = 0;
+  let completedObligations = 0;
+  tasks.forEach(t => {
+    const assignees = Array.isArray(t.assigneeIds) ? t.assigneeIds : (t.assigneeId ? [t.assigneeId] : []);
+    if (assignees.length === 0) {
+      totalObligations += 1;
+      if (t.status === 'Done') completedObligations += 1;
+    } else {
+      totalObligations += assignees.length;
+      assignees.forEach(mId => {
+        if (isTaskDoneForMember(t, mId)) completedObligations += 1;
+      });
+    }
+  });
+  const completionRate = totalObligations > 0 ? Math.round((completedObligations / totalObligations) * 100) : 0;
 
   // Dynamically calculate active lecture session
   // Default to 1 (current active), or the highest lecture with active tasks
@@ -52,9 +67,23 @@ export default function DashboardPage() {
     ? tasks
     : tasks.filter(t => (t.lectureId || t.week || 1) === progressWeek);
 
-  const currentWeekDone = currentWeekTasks.filter(t => t.status === 'Done').length;
-  const currentWeekPct = currentWeekTasks.length > 0 
-    ? Math.round((currentWeekDone / currentWeekTasks.length) * 100) 
+  let currentWeekTotalObligations = 0;
+  let currentWeekDoneObligations = 0;
+  currentWeekTasks.forEach(t => {
+    const assignees = Array.isArray(t.assigneeIds) ? t.assigneeIds : (t.assigneeId ? [t.assigneeId] : []);
+    if (assignees.length === 0) {
+      currentWeekTotalObligations += 1;
+      if (t.status === 'Done') currentWeekDoneObligations += 1;
+    } else {
+      currentWeekTotalObligations += assignees.length;
+      assignees.forEach(mId => {
+        if (isTaskDoneForMember(t, mId)) currentWeekDoneObligations += 1;
+      });
+    }
+  });
+
+  const currentWeekPct = currentWeekTotalObligations > 0 
+    ? Math.round((currentWeekDoneObligations / currentWeekTotalObligations) * 100) 
     : 0;
 
   const handlePrevWeek = (e: React.MouseEvent) => {
@@ -326,8 +355,8 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-[10px] text-muted">
                   {progressWeek === 'all' 
-                    ? `Overall: ${completedTasks}/${totalTasks} (${completionRate}%)`
-                    : `Lecture ${progressWeek}: ${currentWeekDone}/${currentWeekTasks.length} (${currentWeekPct}%)`}
+                    ? `Overall: ${completedObligations}/${totalObligations} completed (${completionRate}%)`
+                    : `Lecture ${progressWeek}: ${currentWeekDoneObligations}/${currentWeekTotalObligations} completed (${currentWeekPct}%)`}
                 </p>
               </div>
 
@@ -388,7 +417,7 @@ export default function DashboardPage() {
                 const memberWeekTasks = currentWeekTasks.filter(t => 
                   Array.isArray(t.assigneeIds) ? t.assigneeIds.includes(member.id) : t.assigneeId === member.id
                 );
-                const memberDone = memberWeekTasks.filter(t => t.status === 'Done').length;
+                const memberDone = memberWeekTasks.filter(t => isTaskDoneForMember(t, member.id)).length;
                 const memberPct = memberWeekTasks.length > 0 ? Math.round((memberDone / memberWeekTasks.length) * 100) : 0;
                 const shortName = getMemberShortName(member.name);
 

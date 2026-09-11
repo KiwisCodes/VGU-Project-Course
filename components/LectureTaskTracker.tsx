@@ -26,7 +26,7 @@ const PRIORITIES: Priority[] = ['High', 'Medium', 'Low'];
 const TOTAL_LECTURES = 16;
 
 export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum }) => {
-  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask } = useProject();
+  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
 
   // Scoped lecture filter: defaults to weekNum, but allows user to cycle/switch to any lecture or 'all'
   const [selectedLecture, setSelectedLecture] = useState<number | 'all'>(weekNum);
@@ -370,6 +370,8 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
           onEditTask={openEditModal}
           onDeleteTask={deleteTask}
           onCreateTaskInStatus={openCreateModal}
+          activeAssigneeFilter={selectedAssignee}
+          onUpdateMemberTaskStatus={setMemberTaskStatus}
         />
       )}
 

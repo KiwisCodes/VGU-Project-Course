@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Member, Task, DriveFolder, DriveFile } from '@/types';
+import { Member, Task, DriveFolder, DriveFile, TaskStatus, getTaskOverallStatus, getTaskMemberStatus } from '@/types';
 import { INITIAL_MEMBERS, INITIAL_TASKS, INITIAL_MEMBER_NOTES } from '@/data/initialData';
 import { DRIVE_FOLDERS } from '@/data/driveData';
 
@@ -21,6 +21,7 @@ interface ProjectContextType {
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (task: Task) => void;
   deleteTask: (taskId: string) => void;
+  setMemberTaskStatus: (taskId: string, memberId: string, status: TaskStatus) => void;
   // Member Actions
   addMember: (member: Omit<Member, 'id'>) => void;
   updateMember: (member: Member) => void;
@@ -54,7 +55,8 @@ export const DEFAULT_TAGS = [
 
 const STORAGE_KEYS = {
   MEMBERS: 'vgu_project_members_v2',
-  TASKS: 'vgu_project_tasks_v4',
+  TASKS: 'vgu_project_tasks_v5',
+  LEGACY_TASKS_V4: 'vgu_project_tasks_v4',
   LEGACY_TASKS_V3: 'vgu_project_tasks_v3',
   LEGACY_TASKS_V2: 'vgu_project_tasks_v2',
   LEGACY_TASKS: 'vgu_project_tasks_v1',
@@ -74,12 +76,22 @@ const normalizeTask = (t: any): Task => {
   }
   const lectureId = typeof t.lectureId === 'number' ? t.lectureId : (typeof t.week === 'number' ? t.week : 1);
   const tag = t.tag || t.pillar || 'Data Engineering';
-  return {
+  const memberStatuses = (t.memberStatuses && typeof t.memberStatuses === 'object' && !Array.isArray(t.memberStatuses))
+    ? { ...t.memberStatuses }
+    : {};
+
+  const baseTask: Task = {
     ...t,
     assigneeIds,
     lectureId,
     tag,
-    pillar: tag // Keep pillar for backward compatibility
+    pillar: tag,
+    memberStatuses
+  };
+
+  return {
+    ...baseTask,
+    status: getTaskOverallStatus(baseTask)
   };
 };
 
@@ -118,10 +130,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
-      const storedTasksV4 = localStorage.getItem(STORAGE_KEYS.TASKS);
-      if (storedTasksV4) {
+      const storedTasksV5 = localStorage.getItem(STORAGE_KEYS.TASKS);
+      if (storedTasksV5) {
         try {
-          const parsed = JSON.parse(storedTasksV4);
+          const parsed = JSON.parse(storedTasksV5);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setTasks(parsed.map(normalizeTask));
           } else {
@@ -134,6 +146,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Automatically switch to new INITIAL_TASKS and remove obsolete task keys
         setTasks(INITIAL_TASKS.map(normalizeTask));
         try {
+          localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V4);
           localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V3);
           localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V2);
           localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS);
@@ -251,6 +264,24 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateTask = (updatedTask: Task) => {
     setTasks(prev => prev.map(t => (t.id === updatedTask.id ? normalizeTask(updatedTask) : t)));
+  };
+
+  const setMemberTaskStatus = (taskId: string, memberId: string, newStatus: TaskStatus) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+
+      const memberStatuses: Record<string, TaskStatus> = {
+        ...(t.memberStatuses || {}),
+        [memberId]: newStatus
+      };
+
+      const updated = normalizeTask({
+        ...t,
+        memberStatuses
+      });
+
+      return updated;
+    }));
   };
 
   const deleteTask = (taskId: string) => {
@@ -415,6 +446,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTags(DEFAULT_TAGS);
     localStorage.removeItem(STORAGE_KEYS.MEMBERS);
     localStorage.removeItem(STORAGE_KEYS.TASKS);
+    localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V4);
     localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V3);
     localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS_V2);
     localStorage.removeItem(STORAGE_KEYS.LEGACY_TASKS);
@@ -440,6 +472,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addTask,
         updateTask,
         deleteTask,
+        setMemberTaskStatus,
         addMember,
         updateMember,
         deleteMember,
