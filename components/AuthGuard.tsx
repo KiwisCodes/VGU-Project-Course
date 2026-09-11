@@ -18,10 +18,10 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const isPublicPath = pathname === '/' || pathname === '/login';
 
   useEffect(() => {
-    if (!loading && !user && !isPublicPath && isConfigured) {
+    if (!loading && !user && !isPublicPath) {
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
     }
-  }, [user, loading, isPublicPath, isConfigured, pathname, router]);
+  }, [user, loading, isPublicPath, pathname, router]);
 
   // Public paths (like Dashboard /) are always rendered
   if (isPublicPath) {
@@ -41,7 +41,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   }
 
   // If unauthenticated on a protected path, show access barrier
-  if (!user && isConfigured) {
+  if (!user) {
     return (
       <div className="min-h-[65vh] flex items-center justify-center p-4">
         <div className="max-w-md w-full p-8 rounded-2xl bg-white dark:bg-[#0a0a0d] border border-slate-200 dark:border-slate-800 shadow-xl text-center">

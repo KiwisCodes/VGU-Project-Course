@@ -272,10 +272,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (storedMembers) {
         try {
           const parsed = JSON.parse(storedMembers);
-          if (Array.isArray(parsed) && parsed.some((m: any) => m.name === 'Alex Nguyen')) {
-            setMembers(INITIAL_MEMBERS);
-          } else if (Array.isArray(parsed) && parsed.length > 0) {
-            setMembers(parsed);
+          if (Array.isArray(parsed)) {
+            const hasLegacyDummy = parsed.some((m: any) => 
+              m.name === 'Alex Nguyen' || 
+              m.name === 'Lê Quang Minh Khoa' || 
+              m.name === 'Nguyễn Võ Minh Khôi' || 
+              m.name === 'Nguyễn Đức Khang' || 
+              m.name === 'Dương Quý Trang'
+            );
+            if (hasLegacyDummy) {
+              setMembers(INITIAL_MEMBERS);
+              localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(INITIAL_MEMBERS));
+            } else if (parsed.length > 0) {
+              setMembers(parsed);
+            }
           }
         } catch (e) {
           setMembers(INITIAL_MEMBERS);

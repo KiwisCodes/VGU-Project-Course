@@ -77,10 +77,11 @@ export const Navbar: React.FC = () => {
               const Icon = link.icon;
               const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
               const isLocked = !user && link.href !== '/';
+              const targetHref = isLocked ? `/login?redirect=${encodeURIComponent(link.href)}` : link.href;
               return (
                 <Link
                   key={link.href}
-                  href={link.href}
+                  href={targetHref}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     isActive
                       ? 'shadow-xs'
@@ -273,10 +274,11 @@ export const Navbar: React.FC = () => {
           const Icon = link.icon;
           const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
           const isLocked = !user && link.href !== '/';
+          const targetHref = isLocked ? `/login?redirect=${encodeURIComponent(link.href)}` : link.href;
           return (
             <Link
               key={link.href}
-              href={link.href}
+              href={targetHref}
               className="flex flex-col items-center gap-1 px-2 py-1 rounded font-bold"
               style={{
                 color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)'
