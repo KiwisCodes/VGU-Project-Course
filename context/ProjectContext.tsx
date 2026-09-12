@@ -549,6 +549,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const setMemberTaskStatus = async (taskId: string, memberId: string, newStatus: TaskStatus) => {
+    let latestComputedOverall: TaskStatus | null = null;
+
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id !== taskId) return t;
@@ -557,6 +559,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           [memberId]: newStatus,
         };
         const computedOverall = getTaskOverallStatus({ ...t, memberStatuses });
+        latestComputedOverall = computedOverall;
         return {
           ...t,
           memberStatuses,
@@ -575,16 +578,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           );
 
         // Also update task overall status in Supabase
-        const targetTask = tasks.find((t) => t.id === taskId);
-        if (targetTask) {
-          const memberStatuses = {
-            ...(targetTask.memberStatuses || {}),
-            [memberId]: newStatus,
-          };
-          const newOverall = getTaskOverallStatus({ ...targetTask, memberStatuses });
-          if (newOverall !== targetTask.status) {
-            await supabase.from('tasks').update({ status: newOverall }).eq('id', taskId);
-          }
+        if (latestComputedOverall) {
+          await supabase.from('tasks').update({ status: latestComputedOverall }).eq('id', taskId);
         }
       } catch (err) {
         console.error('Failed to update assignee status in Supabase:', err);

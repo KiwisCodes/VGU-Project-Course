@@ -64,30 +64,51 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
     }
   };
 
-  // Toggle overall Task status (New <-> Done)
+  // Toggle Task status (New <-> Done)
   const handleToggleTaskStatus = (task: Task) => {
-    const isDone = task.status === 'Done';
+    const isDone = currentMemberId 
+      ? getTaskMemberStatus(task, currentMemberId) === 'Done'
+      : task.status === 'Done';
+
     const check = canMoveTask(task, currentMemberId);
     if (!check.allowed) {
       showNotification(check.reason || 'Permission restricted: Unable to modify task status.');
       return;
     }
 
-    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
-    const isMultiAssignee = assigneeList.length > 1;
-
-    // If individual member on multi-assignee task, toggle their own progress
-    if (currentMemberId && !isTeamLeader && isMultiAssignee) {
-      const currentStatus = getTaskMemberStatus(task, currentMemberId);
-      const nextMemberStatus: TaskStatus = currentStatus === 'Done' ? 'In Progress' : 'Done';
-      
+    // If viewing as a specific member (personal portal view), toggle THIS member's status on the task
+    if (currentMemberId) {
+      const nextMemberStatus: TaskStatus = isDone ? 'In Progress' : 'Done';
       if (onUpdateMemberTaskStatus) {
         onUpdateMemberTaskStatus(task.id, currentMemberId, nextMemberStatus);
+      } else {
+        const updatedStatuses = { ...(task.memberStatuses || {}), [currentMemberId]: nextMemberStatus };
+        const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
+        const allDone = assigneeList.length > 0 && assigneeList.every(mId => updatedStatuses[mId] === 'Done');
+        onUpdateTask({
+          ...task,
+          status: allDone ? 'Done' : 'In Progress',
+          memberStatuses: updatedStatuses
+        });
       }
       return;
     }
 
-    // Toggle full task
+    // On shared /tasks page:
+    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
+    const isMultiAssignee = assigneeList.length > 1;
+
+    // If logged in user is a member on multi-assignee task and not team leader, toggle their own progress
+    if (profile?.id && !isTeamLeader && isMultiAssignee && assigneeList.includes(profile.id)) {
+      const isMemberDone = getTaskMemberStatus(task, profile.id) === 'Done';
+      const nextMemberStatus: TaskStatus = isMemberDone ? 'In Progress' : 'Done';
+      if (onUpdateMemberTaskStatus) {
+        onUpdateMemberTaskStatus(task.id, profile.id, nextMemberStatus);
+      }
+      return;
+    }
+
+    // Otherwise (Team Leader or single assignee), toggle the full task
     const nextStatus: TaskStatus = isDone ? 'In Progress' : 'Done';
     const newMemberStatuses: Record<string, TaskStatus> = {};
     assigneeList.forEach(mId => {
@@ -131,8 +152,12 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
 
   // CRUCIAL REQUIREMENT: "done task goes down the list"
   const sortedTasks = [...tasks].sort((a, b) => {
-    const aDone = a.status === 'Done' ? 1 : 0;
-    const bDone = b.status === 'Done' ? 1 : 0;
+    const aDone = currentMemberId 
+      ? (getTaskMemberStatus(a, currentMemberId) === 'Done' ? 1 : 0)
+      : (a.status === 'Done' ? 1 : 0);
+    const bDone = currentMemberId 
+      ? (getTaskMemberStatus(b, currentMemberId) === 'Done' ? 1 : 0)
+      : (b.status === 'Done' ? 1 : 0);
     return aDone - bDone;
   });
 
@@ -186,7 +211,9 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                 </tr>
               ) : (
                 sortedTasks.map((task) => {
-                  const isDone = task.status === 'Done';
+                  const isDone = currentMemberId 
+                    ? getTaskMemberStatus(task, currentMemberId) === 'Done'
+                    : task.status === 'Done';
                   const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
                   const assignedMembers = members.filter(m => assigneeList.includes(m.id));
                   

@@ -74,9 +74,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
 
   const member = members.find(m => m.id === unwrappedParams.memberId);
 
-  // Scoped Lecture Dial state
   const [selectedLecture, setSelectedLecture] = useState<number | 'all'>(1);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'done'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
 
   // Notes state (1 note per lecture per member)
@@ -143,10 +144,29 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
   const activeTasks = memberTasks.filter(t => getTaskMemberStatus(t, member.id) === 'In Progress');
   const pct = memberTasks.length > 0 ? Math.round((doneTasks.length / memberTasks.length) * 100) : 0;
 
-  // Filter by currently selected lecture
-  const filteredMemberTasks = memberTasks.filter(task => {
+  // Tasks scoped to current lecture selection
+  const memberLectureScopeTasks = memberTasks.filter(task => {
     const taskLecture = task.lectureId || task.week || 1;
     return selectedLecture === 'all' || taskLecture === selectedLecture;
+  });
+
+  const totalMemberLectureAll = memberLectureScopeTasks.length;
+  const totalMemberLectureNew = memberLectureScopeTasks.filter(t => !isTaskDoneForMember(t, member.id)).length;
+  const totalMemberLectureDone = memberLectureScopeTasks.filter(t => isTaskDoneForMember(t, member.id)).length;
+
+  // Filtered tasks for the active view
+  const filteredMemberTasks = memberLectureScopeTasks.filter(task => {
+    const isDone = isTaskDoneForMember(task, member.id);
+    if (statusFilter === 'new' && isDone) return false;
+    if (statusFilter === 'done' && !isDone) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = task.title.toLowerCase().includes(q);
+      const matchDesc = (task.description || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc) return false;
+    }
+    return true;
   });
 
   const handleSaveNote = () => {
@@ -370,23 +390,83 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
       />
 
       {/* Assigned Tasks Board (Full Width 100%) */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <span>Assigned Deliverables ({filteredMemberTasks.length})</span>
-            </h2>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {selectedLecture === 'all' ? 'All sessions' : `Scoped to Lecture ${selectedLecture}`} • Drag cards to update status
-            </p>
+      <div className="space-y-3">
+        
+        {/* Header & Controls Toolbar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          
+          {/* Segmented Status Tabs: All | New Tasks | Done Tasks */}
+          <div className="inline-flex p-1 rounded-xl border self-start" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'all' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{
+                backgroundColor: statusFilter === 'all' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'all' ? 'var(--text-main)' : undefined
+              }}
+            >
+              All ({totalMemberLectureAll})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('new')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'new' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{
+                backgroundColor: statusFilter === 'new' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'new' ? 'var(--accent-blue)' : undefined
+              }}
+            >
+              New Tasks ({totalMemberLectureNew})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('done')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'done' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{
+                backgroundColor: statusFilter === 'done' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'done' ? 'var(--accent-emerald)' : undefined
+              }}
+            >
+              Done Tasks ({totalMemberLectureDone})
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Search, Add Deliverable, & View Switcher */}
+          <div className="flex flex-wrap items-center gap-2 flex-1 md:justify-end">
+            {/* Search Box */}
+            <div className="relative flex-1 max-w-xs">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search deliverables..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl text-xs border focus:outline-none focus:ring-1"
+                style={{
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-main)'
+                }}
+              />
+            </div>
+
             <button
               type="button"
               onClick={() => openCreateModal('In Progress')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 cursor-pointer shrink-0"
               style={{ backgroundColor: 'var(--accent-blue)' }}
             >
               <Plus className="w-3.5 h-3.5" />
@@ -394,7 +474,20 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
             </button>
 
             {/* View Switcher */}
-            <div className="flex items-center rounded-xl p-0.5 border" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
+            <div className="flex items-center rounded-xl p-0.5 border shrink-0" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                title="Table View (7 Columns)"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewMode === 'table' ? 'shadow-xs' : 'opacity-60'}`}
+                style={{
+                  backgroundColor: viewMode === 'table' ? 'var(--bg-surface)' : 'transparent',
+                  color: viewMode === 'table' ? 'var(--accent-blue)' : 'var(--text-muted)'
+                }}
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+
               <button
                 type="button"
                 onClick={() => setViewMode('kanban')}
@@ -407,24 +500,22 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
               >
                 <Columns className="w-3.5 h-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                title="List Table View"
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewMode === 'list' ? 'shadow-xs' : 'opacity-60'}`}
-                style={{
-                  backgroundColor: viewMode === 'list' ? 'var(--bg-surface)' : 'transparent',
-                  color: viewMode === 'list' ? 'var(--accent-blue)' : 'var(--text-muted)'
-                }}
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Full-width Kanban Board or List */}
-        {viewMode === 'kanban' ? (
+        {/* Full-width Table or Kanban Board */}
+        {viewMode === 'table' ? (
+          <TaskTableView
+            tasks={filteredMemberTasks}
+            members={members}
+            onUpdateTask={updateTask}
+            onEditTask={openEditModal}
+            onDeleteTask={deleteTask}
+            onUpdateMemberTaskStatus={setMemberTaskStatus}
+            currentMemberId={member.id}
+          />
+        ) : (
           <KanbanBoard
             tasks={filteredMemberTasks}
             members={members}
@@ -434,16 +525,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
             onCreateTaskInStatus={openCreateModal}
             currentMemberId={member.id}
             onUpdateMemberTaskStatus={setMemberTaskStatus}
-          />
-        ) : (
-          <TaskTableView
-            tasks={filteredMemberTasks}
-            members={members}
-            onUpdateTask={updateTask}
-            onEditTask={openEditModal}
-            onDeleteTask={deleteTask}
-            onUpdateMemberTaskStatus={setMemberTaskStatus}
-            currentMemberId={member.id}
           />
         )}
       </div>
