@@ -43,6 +43,7 @@ export interface Task {
   memberStatuses?: Record<string, TaskStatus>; // Per-member individual status overrides
   dueDate: string;
   createdAt: string;
+  link?: string;
   // Backward compatibility fields
   pillar?: string;
   assigneeId?: string;

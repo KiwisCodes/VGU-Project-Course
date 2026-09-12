@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
+import { TaskTableView } from '@/components/TaskTableView';
 import { TagManagerModal } from '@/components/TagManagerModal';
 import { 
   ArrowLeft, 
@@ -29,7 +30,8 @@ import {
   Users2,
   BookOpen,
   FileText,
-  Tag as TagIcon
+  Tag as TagIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 
 const STATUSES: TaskStatus[] = ['Backlog', 'In Progress', 'Review', 'Done'];
@@ -97,6 +99,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    link: '',
     assigneeIds: [] as string[],
     lectureId: 1,
     tag: 'Data Engineering',
@@ -170,6 +173,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     setFormData({
       title: '',
       description: '',
+      link: '',
       assigneeIds: [member.id],
       lectureId: selectedLecture === 'all' ? 1 : selectedLecture,
       tag: allAvailableTags[0] || 'Data Engineering',
@@ -187,6 +191,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     setFormData({
       title: task.title,
       description: task.description,
+      link: task.link || '',
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : [member.id]),
       lectureId: task.lectureId || task.week || 1,
       tag: task.tag || task.pillar || 'Data Engineering',
@@ -213,6 +218,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     e.preventDefault();
     if (!formData.title.trim()) return;
 
+    const trimmedLink = formData.link.trim() || undefined;
+
     if (editingTaskId) {
       const existing = tasks.find(t => t.id === editingTaskId);
       if (existing) {
@@ -221,6 +228,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
         updateTask({
           ...existing,
           ...formData,
+          link: trimmedLink,
           pillar: formData.tag,
           memberStatuses
         });
@@ -228,6 +236,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     } else {
       addTask({
         ...formData,
+        link: trimmedLink,
         pillar: formData.tag
       });
     }
@@ -427,64 +436,15 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
             onUpdateMemberTaskStatus={setMemberTaskStatus}
           />
         ) : (
-          <div className="bento-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
-                    <th className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-faint)' }}>Status</th>
-                    <th className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-faint)' }}>Task Title</th>
-                    <th className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-faint)' }}>Lecture</th>
-                    <th className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-faint)' }}>Tag</th>
-                    <th className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-faint)' }}>Due Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
-                  {filteredMemberTasks.map(task => {
-                    const memberStatus = getTaskMemberStatus(task, member.id);
-                    return (
-                    <tr 
-                      key={task.id}
-                      onClick={() => openEditModal(task)}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
-                    >
-                      <td className="py-2.5 px-3" onClick={e => e.stopPropagation()}>
-                        <select
-                          value={memberStatus}
-                          onChange={(e) => setMemberTaskStatus(task.id, member.id, e.target.value as TaskStatus)}
-                          className="text-xs font-bold py-0.5 px-1.5 rounded border cursor-pointer"
-                          style={{
-                            borderColor: 'var(--border-subtle)',
-                            backgroundColor: 'var(--bg-surface-elevated)',
-                            color: memberStatus === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
-                          }}
-                        >
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-main)' }}>
-                        {task.title}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="pill-badge pill-blue text-[10px]">
-                          L{task.lectureId || task.week || 1}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`pill-badge text-[10px] ${getTagBadgeClass(task.tag || task.pillar)}`}>
-                          {task.tag || task.pillar}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                        {task.dueDate}
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <TaskTableView
+            tasks={filteredMemberTasks}
+            members={members}
+            onUpdateTask={updateTask}
+            onEditTask={openEditModal}
+            onDeleteTask={deleteTask}
+            onUpdateMemberTaskStatus={setMemberTaskStatus}
+            currentMemberId={member.id}
+          />
         )}
       </div>
 
@@ -817,6 +777,24 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
                   className="w-full px-3 py-2 rounded-xl text-xs border focus:outline-none"
                   style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
                 />
+              </div>
+
+              {/* Link */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>
+                  Resource Link (URL, ArXiv, GitHub)
+                </label>
+                <div className="relative">
+                  <LinkIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={formData.link}
+                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    className="w-full pl-8 pr-3 py-2 rounded-xl text-xs border focus:outline-none"
+                    style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

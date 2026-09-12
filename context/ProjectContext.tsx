@@ -94,6 +94,7 @@ export const normalizeTask = (t: any): Task => {
 
   return {
     ...t,
+    link: t.link || '',
     assigneeIds,
     lectureId,
     tag,
@@ -133,6 +134,7 @@ function mapDbTaskToTask(row: any): Task {
     id: row.id,
     title: row.title,
     description: row.description || '',
+    link: row.link || '',
     lectureId: row.lecture_id || 1,
     tag: row.tag || 'Data Engineering',
     pillar: row.tag || 'Data Engineering',
@@ -467,6 +469,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .insert({
             title: taskData.title,
             description: taskData.description || '',
+            link: taskData.link || null,
             lecture_id: taskData.lectureId || 1,
             tag,
             priority: taskData.priority || 'High',
@@ -518,6 +521,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .update({
             title: taskToSave.title,
             description: taskToSave.description,
+            link: taskToSave.link || null,
             lecture_id: taskToSave.lectureId,
             tag: taskToSave.tag,
             priority: taskToSave.priority,

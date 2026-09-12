@@ -4,23 +4,23 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
-import { Task, TaskStatus, Priority, getTaskMemberStatus, isTaskDoneForMember } from '@/types';
+import { Task, TaskStatus, Priority } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
+import { TaskTableView } from '@/components/TaskTableView';
 import { TagManagerModal } from '@/components/TagManagerModal';
 import { 
   Plus, 
   Search, 
   CheckSquare, 
-  Trash2, 
-  Edit3, 
   X, 
   List, 
   Columns, 
-  Users2, 
   Zap, 
   UserCheck, 
-  Tag as TagIcon 
+  Tag as TagIcon,
+  AlertCircle,
+  Link as LinkIcon
 } from 'lucide-react';
 
 const STATUSES: TaskStatus[] = ['Backlog', 'In Progress', 'Review', 'Done'];
@@ -29,19 +29,35 @@ const TOTAL_LECTURES = 16;
 
 function TasksContent() {
   const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   const searchParams = useSearchParams();
   const lectureParam = searchParams.get('lecture');
   const initialLecture = lectureParam ? (lectureParam === 'all' ? 'all' : parseInt(lectureParam, 10) || 1) : 1;
 
   const [selectedLecture, setSelectedLecture] = useState<number | 'all'>(initialLecture);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'done'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
+  // Sync with searchParams if changed
+  useEffect(() => {
+    if (lectureParam) {
+      if (lectureParam === 'all') {
+        setSelectedLecture('all');
+      } else {
+        const num = parseInt(lectureParam, 10);
+        if (!isNaN(num) && num >= 1 && num <= 16) {
+          setSelectedLecture(num);
+        }
+      }
+    }
+  }, [lectureParam]);
 
   if (loading) {
     return (
@@ -57,20 +73,6 @@ function TasksContent() {
   if (!user) {
     return null;
   }
-
-  // Sync with searchParams if changed
-  useEffect(() => {
-    if (lectureParam) {
-      if (lectureParam === 'all') {
-        setSelectedLecture('all');
-      } else {
-        const num = parseInt(lectureParam, 10);
-        if (!isNaN(num) && num >= 1 && num <= 16) {
-          setSelectedLecture(num);
-        }
-      }
-    }
-  }, [lectureParam]);
 
   // Combine default tags with any custom tags stored in tasks or context
   const allAvailableTags = Array.from(
@@ -89,6 +91,7 @@ function TasksContent() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    link: '',
     assigneeIds: [] as string[],
     lectureId: 1,
     tag: 'Data Engineering',
@@ -104,6 +107,7 @@ function TasksContent() {
     setFormData({
       title: '',
       description: '',
+      link: '',
       assigneeIds: members.length > 0 ? [members[0].id] : [],
       lectureId: selectedLecture === 'all' ? 1 : selectedLecture,
       tag: allAvailableTags[0] || 'Data Engineering',
@@ -121,6 +125,7 @@ function TasksContent() {
     setFormData({
       title: task.title,
       description: task.description,
+      link: task.link || '',
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []),
       lectureId: task.lectureId || task.week || 1,
       tag: task.tag || task.pillar || 'Data Engineering',
@@ -171,86 +176,96 @@ function TasksContent() {
     e.preventDefault();
     if (!formData.title.trim()) return;
 
+    const trimmedLink = formData.link.trim() || undefined;
+
     if (editingTaskId) {
       const existing = tasks.find(t => t.id === editingTaskId);
       if (existing) {
         updateTask({
           ...existing,
           ...formData,
+          link: trimmedLink,
           pillar: formData.tag // Keep backward compatibility
         });
       }
     } else {
       addTask({
         ...formData,
+        link: trimmedLink,
         pillar: formData.tag
       });
     }
     setIsModalOpen(false);
   };
 
-  // Filter tasks
-  const filteredTasks = tasks.filter(task => {
+  // Lecture-level tasks for badge counts
+  const lectureScopeTasks = tasks.filter(task => {
     const taskLecture = task.lectureId || task.week || 1;
+    return selectedLecture === 'all' || taskLecture === selectedLecture;
+  });
+
+  const totalLectureAll = lectureScopeTasks.length;
+  const totalLectureNew = lectureScopeTasks.filter(t => t.status !== 'Done').length;
+  const totalLectureDone = lectureScopeTasks.filter(t => t.status === 'Done').length;
+
+  // Filter tasks for the active view
+  const filteredTasks = lectureScopeTasks.filter(task => {
     const taskAssignees = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
     const taskTag = task.tag || task.pillar || '';
     
-    const matchesLecture = selectedLecture === 'all' || taskLecture === selectedLecture;
-    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          task.description.toLowerCase().includes(searchQuery.toLowerCase());
+    // Status Filter (All / New / Done)
+    if (statusFilter === 'new' && task.status === 'Done') return false;
+    if (statusFilter === 'done' && task.status !== 'Done') return false;
+
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = task.title.toLowerCase().includes(q);
+      const matchDesc = (task.description || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc) return false;
+    }
+
+    // Secondary filters
     const matchesAssignee = selectedAssignee === 'all' || taskAssignees.includes(selectedAssignee);
     const matchesTag = selectedTag === 'all' || taskTag === selectedTag;
     const matchesPriority = selectedPriority === 'all' || task.priority === selectedPriority;
     
-    return matchesLecture && matchesSearch && matchesAssignee && matchesTag && matchesPriority;
+    return matchesAssignee && matchesTag && matchesPriority;
   });
 
-  const getTagBadgeClass = (tag?: string) => {
-    if (!tag) return 'pill-cyan';
-    switch (tag) {
-      case 'RAG / KG': return 'pill-blue';
-      case 'Fine-Tuning': return 'pill-purple';
-      case 'Multi-Agents': return 'pill-emerald';
-      case 'Data Engineering': return 'pill-amber';
-      case 'DevOps / Report': return 'pill-rose';
-      case 'Evaluation': return 'pill-purple';
-      default: {
-        const palette = ['pill-blue', 'pill-emerald', 'pill-purple', 'pill-amber', 'pill-rose', 'pill-cyan'];
-        let hash = 0;
-        for (let i = 0; i < tag.length; i++) {
-          hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return palette[Math.abs(hash) % palette.length];
-      }
-    }
-  };
-
-  const getPriorityBadgeClass = (priority: Priority) => {
-    switch (priority) {
-      case 'High': return 'text-red-500 bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900';
-      case 'Medium': return 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900';
-      case 'Low': return 'text-slate-500 bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800';
-    }
-  };
-
-  const currentLectureTasks = tasks.filter(t => (t.lectureId || t.week || 1) === selectedLecture);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+
+      {/* Notice Banner */}
+      {noticeMessage && (
+        <div className="p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>{noticeMessage}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setNoticeMessage(null)} 
+            className="font-bold px-2 hover:opacity-70 cursor-pointer"
+          >
+            x
+          </button>
+        </div>
+      )}
 
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="pill-badge pill-blue">Drag &amp; Drop Enabled</span>
+            <span className="pill-badge pill-blue">Sprint Tasks</span>
             <span className="pill-badge pill-purple">Cyclic Lecture Dial</span>
-            <span className="pill-badge pill-emerald">Custom Tags</span>
+            <span className="pill-badge pill-emerald">2-State Workflow</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text-main)' }}>
             Course Tasks Board
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Sprint deliverables categorized by lecture session. Drag cards across columns to update task progress.
+          <p className="text-xs sm:text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Sprint deliverables categorized by lecture session. Track new and completed tasks across all team members.
           </p>
         </div>
 
@@ -266,7 +281,7 @@ function TasksContent() {
         </div>
       </div>
 
-      {/* Cyclic Horizontal Lecture Dial */}
+      {/* 1. Cyclic Horizontal Lecture Dial */}
       <LectureDial
         selectedLecture={selectedLecture}
         onSelectLecture={setSelectedLecture}
@@ -274,30 +289,79 @@ function TasksContent() {
         totalLectures={TOTAL_LECTURES}
       />
 
-      {/* Search and Filters Bar */}
-      <div className="bento-card p-4">
+      {/* 2. Controls Toolbar & Segmented Status Filter */}
+      <div className="space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search tasks across titles or descriptions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl text-xs border focus:outline-none focus:ring-1"
+          {/* Segmented Status Tabs: All | New Tasks | Done Tasks */}
+          <div className="inline-flex p-1 rounded-xl border self-start" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'all' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
               style={{
-                backgroundColor: 'var(--bg-surface-elevated)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-main)'
+                backgroundColor: statusFilter === 'all' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'all' ? 'var(--text-main)' : undefined
               }}
-            />
+            >
+              All ({totalLectureAll})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('new')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'new' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{
+                backgroundColor: statusFilter === 'new' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'new' ? 'var(--accent-blue)' : undefined
+              }}
+            >
+              New Tasks ({totalLectureNew})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('done')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'done' 
+                  ? 'shadow-xs' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{
+                backgroundColor: statusFilter === 'done' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: statusFilter === 'done' ? 'var(--accent-emerald)' : undefined
+              }}
+            >
+              Done Tasks ({totalLectureDone})
+            </button>
           </div>
 
-          {/* Filters & View Switcher */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Search Box & View Mode Toggle */}
+          <div className="flex flex-wrap items-center gap-2 flex-1 md:justify-end">
             
+            {/* Search Box */}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search tasks across titles or descriptions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl text-xs border focus:outline-none focus:ring-1"
+                style={{
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-main)'
+                }}
+              />
+            </div>
+
             {/* Assignee Filter */}
             <select
               value={selectedAssignee}
@@ -314,42 +378,6 @@ function TasksContent() {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-
-            {/* Tag Filter & Manager */}
-            <div className="flex items-center gap-1">
-              <select
-                value={selectedTag}
-                onChange={(e) => {
-                  if (e.target.value === '__manage__') {
-                    setIsTagManagerOpen(true);
-                  } else {
-                    setSelectedTag(e.target.value);
-                  }
-                }}
-                className="px-2.5 py-1.5 rounded-xl text-xs border font-semibold focus:outline-none cursor-pointer"
-                style={{
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-main)'
-                }}
-              >
-                <option value="all">Tag: All</option>
-                {allAvailableTags.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-                <option value="__manage__" className="font-bold text-blue-500">⚙ Manage Tags...</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setIsTagManagerOpen(true)}
-                title="Manage & Delete Project Tags"
-                className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-muted hover:text-blue-500 cursor-pointer"
-                style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}
-              >
-                <TagIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
 
             {/* Priority Filter */}
             <select
@@ -368,9 +396,25 @@ function TasksContent() {
               ))}
             </select>
 
-            {/* View Mode Toggle */}
+            {/* View Mode Toggle (Table / Kanban) */}
             <div className="flex items-center rounded-xl p-0.5 border" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
               <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                title="Table View (7 Columns)"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table' ? 'shadow-xs' : 'opacity-60 hover:opacity-100'
+                }`}
+                style={{
+                  backgroundColor: viewMode === 'table' ? 'var(--bg-surface)' : 'transparent',
+                  color: viewMode === 'table' ? 'var(--accent-blue)' : 'var(--text-muted)'
+                }}
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setViewMode('kanban')}
                 title="Kanban Board View"
                 className={`p-1.5 rounded-lg transition-all cursor-pointer ${
@@ -383,183 +427,38 @@ function TasksContent() {
               >
                 <Columns className="w-3.5 h-3.5" />
               </button>
-
-              <button
-                onClick={() => setViewMode('list')}
-                title="List View"
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'list' ? 'shadow-xs' : 'opacity-60 hover:opacity-100'
-                }`}
-                style={{
-                  backgroundColor: viewMode === 'list' ? 'var(--bg-surface)' : 'transparent',
-                  color: viewMode === 'list' ? 'var(--accent-blue)' : 'var(--text-muted)'
-                }}
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
             </div>
 
           </div>
-
         </div>
       </div>
 
-      {/* MAIN TASK VIEW (KANBAN OR TABLE) */}
-      {viewMode === 'kanban' ? (
-        filteredTasks.length === 0 && selectedLecture !== 'all' && currentLectureTasks.length === 0 ? (
-          /* Empty lecture state */
-          <div className="bento-card p-12 text-center max-w-md mx-auto space-y-3">
-            <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-500">
-              <CheckSquare className="w-6 h-6" />
-            </div>
-            <h3 className="font-extrabold text-sm" style={{ color: 'var(--text-main)' }}>
-              No Tasks for Lecture {selectedLecture}
-            </h3>
-            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-              This lecture does not have any sprint deliverables yet. Create the first task to begin tracking action items.
-            </p>
-            <div className="pt-2">
-              <button
-                onClick={() => openCreateModal('Backlog')}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all cursor-pointer"
-                style={{ backgroundColor: 'var(--accent-blue)' }}
-              >
-                + Create First Task for Lecture {selectedLecture}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <KanbanBoard
-            tasks={filteredTasks}
-            members={members}
-            onUpdateTask={updateTask}
-            onEditTask={openEditModal}
-            onDeleteTask={deleteTask}
-            onCreateTaskInStatus={openCreateModal}
-            activeAssigneeFilter={selectedAssignee}
-            onUpdateMemberTaskStatus={setMemberTaskStatus}
-          />
-        )
+      {/* 3. MAIN TASK VIEW: TABLE OR KANBAN */}
+      {viewMode === 'table' ? (
+        <TaskTableView
+          tasks={filteredTasks}
+          members={members}
+          onUpdateTask={updateTask}
+          onEditTask={openEditModal}
+          onDeleteTask={deleteTask}
+          onUpdateMemberTaskStatus={setMemberTaskStatus}
+          currentMemberId={profile?.id}
+          onNotice={(msg) => {
+            setNoticeMessage(msg);
+            setTimeout(() => setNoticeMessage(null), 4000);
+          }}
+        />
       ) : (
-        /* Table View */
-        <div className="bento-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Status</th>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Task Title</th>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Lecture</th>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Tag</th>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Priority</th>
-                  <th className="py-3 px-4 font-bold" style={{ color: 'var(--text-faint)' }}>Assignees</th>
-                  <th className="py-3 px-4 font-bold text-right" style={{ color: 'var(--text-faint)' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
-                {filteredTasks.map(task => {
-                  const taskLecture = task.lectureId || task.week || 1;
-                  const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
-                  const assignedMembers = members.filter(m => assigneeList.includes(m.id));
-                  const isSpecificMember = selectedAssignee !== 'all';
-                  const displayStatus = isSpecificMember ? getTaskMemberStatus(task, selectedAssignee) : task.status;
-
-                  return (
-                    <tr 
-                      key={task.id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
-                      onClick={() => openEditModal(task)}
-                    >
-                      <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                        <select
-                          value={displayStatus}
-                          onChange={(e) => {
-                            const newStatus = e.target.value as TaskStatus;
-                            if (isSpecificMember) {
-                              setMemberTaskStatus(task.id, selectedAssignee, newStatus);
-                            } else {
-                              updateTask({ ...task, status: newStatus });
-                            }
-                          }}
-                          className="text-xs font-bold py-1 px-2 rounded-lg border cursor-pointer"
-                          style={{
-                            borderColor: 'var(--border-subtle)',
-                            backgroundColor: 'var(--bg-surface-elevated)',
-                            color: displayStatus === 'Done' ? 'var(--accent-emerald)' : 'var(--text-main)'
-                          }}
-                        >
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className="font-bold block" style={{ color: 'var(--text-main)' }}>{task.title}</span>
-                        <span className="text-[11px] line-clamp-1" style={{ color: 'var(--text-muted)' }}>{task.description}</span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className="pill-badge pill-blue text-[10px]">
-                          Lecture {taskLecture}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className={`pill-badge text-[10px] ${getTagBadgeClass(task.tag || task.pillar)}`}>
-                          {task.tag || task.pillar}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${getPriorityBadgeClass(task.priority)}`}>
-                          {task.priority}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1">
-                          {assignedMembers.map(m => {
-                            const isDone = isTaskDoneForMember(task, m.id);
-                            return (
-                              <span 
-                                key={m.id}
-                                title={`${m.name} (${isDone ? 'Done' : 'In Progress'})`}
-                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs transition-transform ${
-                                  isDone ? 'ring-2 ring-emerald-500' : 'opacity-70'
-                                }`}
-                                style={{ backgroundColor: m.avatarBg }}
-                              >
-                                {m.initials}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openEditModal(task)}
-                            className="p-1 rounded text-muted hover:text-blue-500"
-                            title="Edit task"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteTask(task.id)}
-                            className="p-1 rounded text-muted hover:text-red-500"
-                            title="Delete task"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <KanbanBoard
+          tasks={filteredTasks}
+          members={members}
+          onUpdateTask={updateTask}
+          onEditTask={openEditModal}
+          onDeleteTask={deleteTask}
+          onCreateTaskInStatus={openCreateModal}
+          activeAssigneeFilter={selectedAssignee}
+          onUpdateMemberTaskStatus={setMemberTaskStatus}
+        />
       )}
 
       {/* ADD / EDIT TASK MODAL */}
@@ -615,6 +514,24 @@ function TasksContent() {
                   className="w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1 resize-none"
                   style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
                 />
+              </div>
+
+              {/* Link (URL) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>
+                  Resource Link (URL, ArXiv, GitHub)
+                </label>
+                <div className="relative">
+                  <LinkIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="url"
+                    placeholder="https://arxiv.org/abs/... or https://github.com/..."
+                    value={formData.link}
+                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    className="w-full pl-8 pr-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1"
+                    style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
+                  />
+                </div>
               </div>
 
               {/* Lecture & Due Date */}
@@ -796,7 +713,7 @@ function TasksContent() {
                         + Add New Tag...
                       </option>
                       <option value="__manage__" className="font-bold text-slate-500">
-                        ⚙ Manage / Delete Tags...
+                        Manage / Delete Tags...
                       </option>
                     </select>
                   )}
