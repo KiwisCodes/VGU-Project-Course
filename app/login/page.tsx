@@ -80,14 +80,7 @@ function LoginFormContent() {
     setSubmitting(false);
   };
 
-  const [registeredMembers, setRegisteredMembers] = useState<RegisteredUser[]>([
-    {
-      name: 'Tester',
-      email: '0001@student.vgu.edu.vn',
-      studentId: '0001',
-      isTester: true,
-    },
-  ]);
+  const [registeredMembers, setRegisteredMembers] = useState<RegisteredUser[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
 
   useEffect(() => {

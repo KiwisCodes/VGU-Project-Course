@@ -8,7 +8,6 @@ import { Task, TaskStatus, Priority } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TaskTableView } from '@/components/TaskTableView';
-import { TagManagerModal } from '@/components/TagManagerModal';
 import { 
   Plus, 
   Search, 
@@ -18,7 +17,6 @@ import {
   Columns, 
   Zap, 
   UserCheck, 
-  Tag as TagIcon,
   AlertCircle,
   Link as LinkIcon
 } from 'lucide-react';
@@ -28,7 +26,7 @@ const PRIORITIES: Priority[] = ['High', 'Medium', 'Low'];
 const TOTAL_LECTURES = 16;
 
 function TasksContent() {
-  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
+  const { tasks, members, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
   const { user, profile, loading } = useAuth();
 
   const searchParams = useSearchParams();
@@ -40,9 +38,7 @@ function TasksContent() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'done'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('all');
-  const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
-  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   // Sync with searchParams if changed
@@ -74,18 +70,9 @@ function TasksContent() {
     return null;
   }
 
-  // Combine default tags with any custom tags stored in tasks or context
-  const allAvailableTags = Array.from(
-    new Set([...tags, ...tasks.map(t => t.tag || t.pillar).filter(Boolean)])
-  );
-
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-
-  // Tag creation state in modal
-  const [isCreatingNewTag, setIsCreatingNewTag] = useState(false);
-  const [customTagInput, setCustomTagInput] = useState('');
   
   // Form State
   const [formData, setFormData] = useState({
@@ -94,23 +81,19 @@ function TasksContent() {
     link: '',
     assigneeIds: [] as string[],
     lectureId: 1,
-    tag: 'Data Engineering',
     priority: 'High' as Priority,
-    status: 'Backlog' as TaskStatus,
+    status: 'In Progress' as TaskStatus,
     dueDate: new Date().toISOString().split('T')[0]
   });
 
   const openCreateModal = (defaultStatus: TaskStatus = 'In Progress') => {
     setEditingTaskId(null);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: '',
       description: '',
       link: '',
       assigneeIds: members.length > 0 ? [members[0].id] : [],
       lectureId: selectedLecture === 'all' ? 1 : selectedLecture,
-      tag: allAvailableTags[0] || 'Data Engineering',
       priority: 'High',
       status: defaultStatus,
       dueDate: new Date().toISOString().split('T')[0]
@@ -120,30 +103,17 @@ function TasksContent() {
 
   const openEditModal = (task: Task) => {
     setEditingTaskId(task.id);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: task.title,
       description: task.description,
       link: task.link || '',
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []),
       lectureId: task.lectureId || task.week || 1,
-      tag: task.tag || task.pillar || 'Data Engineering',
       priority: task.priority,
       status: task.status,
       dueDate: task.dueDate
     });
     setIsModalOpen(true);
-  };
-
-  const handleConfirmNewTag = () => {
-    const trimmed = customTagInput.trim();
-    if (trimmed) {
-      addTag(trimmed);
-      setFormData(prev => ({ ...prev, tag: trimmed }));
-      setCustomTagInput('');
-      setIsCreatingNewTag(false);
-    }
   };
 
   const toggleAssignee = (memberId: string) => {
@@ -184,15 +154,13 @@ function TasksContent() {
         updateTask({
           ...existing,
           ...formData,
-          link: trimmedLink,
-          pillar: formData.tag // Keep backward compatibility
+          link: trimmedLink
         });
       }
     } else {
       addTask({
         ...formData,
-        link: trimmedLink,
-        pillar: formData.tag
+        link: trimmedLink
       });
     }
     setIsModalOpen(false);
@@ -211,7 +179,6 @@ function TasksContent() {
   // Filter tasks for the active view
   const filteredTasks = lectureScopeTasks.filter(task => {
     const taskAssignees = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
-    const taskTag = task.tag || task.pillar || '';
     
     // Status Filter (All / New / Done)
     if (statusFilter === 'new' && task.status === 'Done') return false;
@@ -227,10 +194,9 @@ function TasksContent() {
 
     // Secondary filters
     const matchesAssignee = selectedAssignee === 'all' || taskAssignees.includes(selectedAssignee);
-    const matchesTag = selectedTag === 'all' || taskTag === selectedTag;
     const matchesPriority = selectedPriority === 'all' || task.priority === selectedPriority;
     
-    return matchesAssignee && matchesTag && matchesPriority;
+    return matchesAssignee && matchesPriority;
   });
 
   return (
@@ -627,97 +593,8 @@ function TasksContent() {
                 </div>
               </div>
 
-              {/* Tag, Priority, Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                
-                {/* Tag Selector with "+ Add new tag" and "Manage" */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                      Tag
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsTagManagerOpen(true)}
-                        className="text-[10px] font-bold text-muted hover:text-blue-500 hover:underline cursor-pointer"
-                      >
-                        Manage
-                      </button>
-                      {!isCreatingNewTag && (
-                        <button
-                          type="button"
-                          onClick={() => setIsCreatingNewTag(true)}
-                          className="text-[10px] font-bold text-blue-500 hover:underline cursor-pointer flex items-center gap-0.5"
-                        >
-                          <Plus className="w-3 h-3" /> New
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isCreatingNewTag ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="New tag..."
-                        value={customTagInput}
-                        onChange={(e) => setCustomTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleConfirmNewTag();
-                          }
-                        }}
-                        className="flex-1 px-2.5 py-1.5 rounded-xl text-xs border font-semibold"
-                        style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleConfirmNewTag}
-                        className="px-2 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 cursor-pointer"
-                        style={{ backgroundColor: 'var(--accent-blue)' }}
-                      >
-                        Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsCreatingNewTag(false)}
-                        className="p-1 rounded-xl border text-xs text-muted hover:opacity-80 cursor-pointer"
-                        style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      value={formData.tag}
-                      onChange={(e) => {
-                        if (e.target.value === '__add_new__') {
-                          setIsCreatingNewTag(true);
-                        } else if (e.target.value === '__manage__') {
-                          setIsTagManagerOpen(true);
-                        } else {
-                          setFormData({ ...formData, tag: e.target.value });
-                        }
-                      }}
-                      className="w-full px-3 py-2 rounded-xl text-xs border font-semibold cursor-pointer"
-                      style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                    >
-                      {allAvailableTags.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                      <option value="__add_new__" className="font-bold text-blue-500">
-                        + Add New Tag...
-                      </option>
-                      <option value="__manage__" className="font-bold text-slate-500">
-                        Manage / Delete Tags...
-                      </option>
-                    </select>
-                  )}
-                </div>
-
+              {/* Priority & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>
                     Priority
@@ -771,20 +648,6 @@ function TasksContent() {
           </div>
         </div>
       )}
-
-      {/* Tag Manager Modal */}
-      <TagManagerModal
-        isOpen={isTagManagerOpen}
-        onClose={() => setIsTagManagerOpen(false)}
-        onTagDeleted={(deletedTag) => {
-          if (selectedTag === deletedTag) {
-            setSelectedTag('all');
-          }
-          if (formData.tag === deletedTag) {
-            setFormData(prev => ({ ...prev, tag: tags[0] || 'Data Engineering' }));
-          }
-        }}
-      />
 
     </div>
   );

@@ -37,7 +37,7 @@ export interface Task {
   description: string;
   assigneeIds: string[]; // 1, many, or all team members
   lectureId: number;     // Scoped to Lecture (1, 2, ..., 16)
-  tag: string;           // Dynamic tag category (formerly pillar)
+  tag?: string;          // Optional legacy tag (deprecated)
   priority: Priority;
   status: TaskStatus;
   memberStatuses?: Record<string, TaskStatus>; // Per-member individual status overrides

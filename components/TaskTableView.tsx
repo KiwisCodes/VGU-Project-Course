@@ -230,10 +230,14 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                   const allMembersDone = totalCount > 0 && doneCount === totalCount;
                   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : (isDone ? 100 : 0);
 
+                  const rawLink = task.link || (task.description && task.description.startsWith('http') ? task.description.trim() : undefined);
+
                   return (
                     <tr 
                       key={task.id}
-                      className="transition-colors duration-150 ease-out hover:bg-slate-50/80 dark:hover:bg-white/[0.032] group"
+                      onClick={() => onEditTask && onEditTask(task)}
+                      title="Click to view or edit deliverable details"
+                      className="transition-colors duration-150 ease-out hover:bg-slate-50/80 dark:hover:bg-white/[0.032] group cursor-pointer"
                     >
                       {/* 1. Task Title (NO 'done' tag inside, NO line-through, crisp typography) */}
                       <td className="py-3.5 px-4 align-top">
@@ -248,11 +252,14 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                           </span>
 
                           {/* Quick Edit/Delete on row hover */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
                             {onEditTask && (
                               <button
                                 type="button"
-                                onClick={() => onEditTask(task)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEditTask(task);
+                                }}
                                 title="Edit Task"
                                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                               >
@@ -262,7 +269,10 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                             {onDeleteTask && (
                               <button
                                 type="button"
-                                onClick={() => onDeleteTask(task.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteTask(task.id);
+                                }}
                                 title="Delete Task"
                                 className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-950/60 text-slate-400 hover:text-red-600 cursor-pointer"
                               >
@@ -286,9 +296,9 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
 
                       {/* 3. Link Column */}
                       <td className="py-3.5 px-3 align-top text-center" onClick={e => e.stopPropagation()}>
-                        {task.link ? (
+                        {rawLink ? (
                           <a
-                            href={task.link}
+                            href={rawLink}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Open resource link"

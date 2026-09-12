@@ -252,26 +252,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     });
   };
 
-  const getTagBadgeClass = (tag?: string) => {
-    if (!tag) return 'pill-cyan';
-    switch (tag) {
-      case 'RAG / KG': return 'pill-blue';
-      case 'Fine-Tuning': return 'pill-purple';
-      case 'Multi-Agents': return 'pill-emerald';
-      case 'Data Engineering': return 'pill-amber';
-      case 'DevOps / Report': return 'pill-rose';
-      case 'Evaluation': return 'pill-purple';
-      default: {
-        const palette = ['pill-blue', 'pill-emerald', 'pill-purple', 'pill-amber', 'pill-rose', 'pill-cyan'];
-        let hash = 0;
-        for (let i = 0; i < tag.length; i++) {
-          hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return palette[Math.abs(hash) % palette.length];
-      }
-    }
-  };
-
   const getPriorityBadgeClass = (priority: Priority) => {
     switch (priority) {
       case 'High': return 'text-red-500 bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900';
@@ -402,6 +382,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   const isBeingDragged = draggedTaskId === task.id;
                   const cardDone = isTaskDone(task);
 
+                  const rawLink = task.link || (task.description && task.description.startsWith('http') ? task.description.trim() : undefined);
+
                   return (
                     <div
                       key={task.id}
@@ -426,14 +408,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <span className="pill-badge pill-blue text-[10px] py-0.5 px-2">
                             L{taskLecture}
                           </span>
-                          {task.link && (
+                          {rawLink && (
                             <a
-                              href={task.link}
+                              href={rawLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              title="Open resource link"
+                              title={rawLink}
                               onClick={e => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-all hover:underline"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all hover:underline"
                               style={{
                                 backgroundColor: 'var(--bg-surface-elevated)',
                                 color: 'var(--accent-blue)',
@@ -460,6 +442,27 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       <p className="text-[11px] line-clamp-2 leading-relaxed mb-2" style={{ color: 'var(--text-muted)' }}>
                         {task.description || '-'}
                       </p>
+
+                      {/* Prominent Resource Link Banner on Kanban Card */}
+                      {rawLink && (
+                        <div className="mb-2.5" onClick={e => e.stopPropagation()}>
+                          <a
+                            href={rawLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={rawLink}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all hover:underline border shadow-xs max-w-full"
+                            style={{
+                              backgroundColor: 'var(--bg-surface-elevated)',
+                              color: 'var(--accent-blue)',
+                              borderColor: 'var(--border-subtle)'
+                            }}
+                          >
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{rawLink.replace(/^https?:\/\//, '')}</span>
+                          </a>
+                        </div>
+                      )}
 
                       {/* Member Completion Progress & Interactive Chips (for multi-assignee tasks) */}
                       {assigneeList.length > 1 && (

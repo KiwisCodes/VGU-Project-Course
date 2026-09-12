@@ -12,18 +12,6 @@ export const INITIAL_MEMBERS: Member[] = [
     bio: '',
     skills: [],
     isTeamLeader: false,
-  },
-  {
-    id: 'bd5941a6-c419-43fe-a550-eb2de5cf9336',
-    name: 'Tester',
-    studentId: '0001',
-    role: 'Tester',
-    email: '0001@student.vgu.edu.vn',
-    avatarBg: '#6366f1',
-    initials: 'TS',
-    bio: '',
-    skills: [],
-    isTeamLeader: false,
   }
 ];
 

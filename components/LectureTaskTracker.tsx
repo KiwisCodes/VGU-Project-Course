@@ -5,11 +5,9 @@ import { useProject } from '@/context/ProjectContext';
 import { Task, TaskStatus, Priority } from '@/types';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { LectureDial } from '@/components/LectureDial';
-import { TagManagerModal } from '@/components/TagManagerModal';
 import { 
   Plus, 
   Search, 
-  Tag as TagIcon, 
   X, 
   Zap, 
   UserCheck, 
@@ -26,22 +24,16 @@ const PRIORITIES: Priority[] = ['High', 'Medium', 'Low'];
 const TOTAL_LECTURES = 16;
 
 export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum }) => {
-  const { tasks, members, tags, addTag, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
+  const { tasks, members, addTask, updateTask, deleteTask, setMemberTaskStatus } = useProject();
 
   // Scoped lecture filter: defaults to weekNum, but allows user to cycle/switch to any lecture or 'all'
   const [selectedLecture, setSelectedLecture] = useState<number | 'all'>(weekNum);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('all');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
-
-  // Tag creation state in modal
-  const [isCreatingNewTag, setIsCreatingNewTag] = useState(false);
-  const [customTagInput, setCustomTagInput] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -49,15 +41,10 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
     description: '',
     assigneeIds: [] as string[],
     lectureId: weekNum,
-    tag: 'Data Engineering',
     priority: 'High' as Priority,
     status: 'In Progress' as TaskStatus,
     dueDate: new Date().toISOString().split('T')[0]
   });
-
-  const allAvailableTags = Array.from(
-    new Set([...tags, ...tasks.map(t => t.tag || t.pillar).filter(Boolean)])
-  );
 
   // Filter tasks for the Kanban Board
   const filteredTasks = tasks.filter(task => {
@@ -73,14 +60,6 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
         ? task.assigneeIds 
         : (task.assigneeId ? [task.assigneeId] : []);
       if (!assignees.includes(selectedAssignee)) {
-        return false;
-      }
-    }
-
-    // Tag filter
-    if (selectedTag !== 'all') {
-      const taskTag = task.tag || task.pillar || '';
-      if (taskTag.toLowerCase() !== selectedTag.toLowerCase()) {
         return false;
       }
     }
@@ -101,14 +80,11 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
   // Open Create Modal
   const openCreateModal = (defaultStatus: TaskStatus = 'In Progress') => {
     setEditingTaskId(null);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: '',
       description: '',
       assigneeIds: members.map(m => m.id), // Default to all members
       lectureId: selectedLecture === 'all' ? weekNum : selectedLecture,
-      tag: allAvailableTags[0] || 'Data Engineering',
       priority: 'High',
       status: defaultStatus,
       dueDate: new Date().toISOString().split('T')[0]
@@ -119,30 +95,16 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
   // Open Edit Modal
   const openEditModal = (task: Task) => {
     setEditingTaskId(task.id);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: task.title,
       description: task.description,
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []),
       lectureId: task.lectureId || task.week || 1,
-      tag: task.tag || task.pillar || 'Data Engineering',
       priority: task.priority,
       status: task.status,
       dueDate: task.dueDate
     });
     setIsModalOpen(true);
-  };
-
-  // Confirm new tag
-  const handleConfirmNewTag = () => {
-    const trimmed = customTagInput.trim();
-    if (trimmed) {
-      addTag(trimmed);
-      setFormData(prev => ({ ...prev, tag: trimmed }));
-      setCustomTagInput('');
-      setIsCreatingNewTag(false);
-    }
   };
 
   // Assignee toggles
@@ -186,8 +148,6 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
           description: formData.description.trim(),
           assigneeIds: formData.assigneeIds,
           lectureId: formData.lectureId,
-          tag: formData.tag,
-          pillar: formData.tag,
           priority: formData.priority,
           status: formData.status,
           dueDate: formData.dueDate
@@ -200,8 +160,6 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
         assigneeIds: formData.assigneeIds,
         lectureId: formData.lectureId,
         week: formData.lectureId,
-        tag: formData.tag,
-        pillar: formData.tag,
         priority: formData.priority,
         status: formData.status,
         dueDate: formData.dueDate
@@ -279,7 +237,7 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
             />
           </div>
 
-          {/* Selectors: Assignee & Tag */}
+          {/* Selectors: Assignee */}
           <div className="flex flex-wrap items-center gap-2">
             
             {/* Assignee Filter */}
@@ -298,42 +256,6 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-
-            {/* Tag Filter & Manager */}
-            <div className="flex items-center gap-1">
-              <select
-                value={selectedTag}
-                onChange={(e) => {
-                  if (e.target.value === '__manage__') {
-                    setIsTagManagerOpen(true);
-                  } else {
-                    setSelectedTag(e.target.value);
-                  }
-                }}
-                className="px-2.5 py-1.5 rounded-xl text-xs border font-semibold cursor-pointer"
-                style={{
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-main)'
-                }}
-              >
-                <option value="all">Tag: All</option>
-                {allAvailableTags.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-                <option value="__manage__" className="font-bold text-blue-500">⚙ Manage Tags...</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setIsTagManagerOpen(true)}
-                title="Manage & Delete Project Tags"
-                className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-muted hover:text-blue-500 cursor-pointer"
-                style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-surface-elevated)' }}
-              >
-                <TagIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
 
           </div>
 
@@ -525,81 +447,8 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
                 </div>
               </div>
 
-              {/* Tag, Priority, Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* Tag */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                      Tag
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setIsTagManagerOpen(true)}
-                        className="text-[9px] font-bold text-muted hover:text-blue-500 hover:underline cursor-pointer"
-                      >
-                        Manage
-                      </button>
-                      {!isCreatingNewTag && (
-                        <button
-                          type="button"
-                          onClick={() => setIsCreatingNewTag(true)}
-                          className="text-[9px] font-bold text-blue-500 hover:underline cursor-pointer"
-                        >
-                          + New
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isCreatingNewTag ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="Tag..."
-                        value={customTagInput}
-                        onChange={(e) => setCustomTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleConfirmNewTag();
-                          }
-                        }}
-                        className="w-full px-2 py-1 rounded-lg text-xs border font-semibold"
-                        style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleConfirmNewTag}
-                        className="px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-blue-600 cursor-pointer"
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      value={formData.tag}
-                      onChange={(e) => {
-                        if (e.target.value === '__add_new__') {
-                          setIsCreatingNewTag(true);
-                        } else if (e.target.value === '__manage__') {
-                          setIsTagManagerOpen(true);
-                        } else {
-                          setFormData({ ...formData, tag: e.target.value });
-                        }
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-xl text-xs border font-semibold cursor-pointer"
-                      style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                    >
-                      {allAvailableTags.map(t => <option key={t} value={t}>{t}</option>)}
-                      <option value="__add_new__" className="font-bold text-blue-500">+ Add New Tag...</option>
-                      <option value="__manage__" className="font-bold text-slate-500">⚙ Manage / Delete Tags...</option>
-                    </select>
-                  )}
-                </div>
-
+              {/* Priority & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {/* Priority */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>
@@ -655,16 +504,6 @@ export const LectureTaskTracker: React.FC<LectureTaskTrackerProps> = ({ weekNum 
           </div>
         </div>
       )}
-
-      {/* Tag Manager Modal */}
-      <TagManagerModal
-        isOpen={isTagManagerOpen}
-        onClose={() => setIsTagManagerOpen(false)}
-        onTagDeleted={(deletedTag) => {
-          if (selectedTag === deletedTag) setSelectedTag('all');
-          if (formData.tag === deletedTag) setFormData(p => ({ ...p, tag: tags[0] || 'Data Engineering' }));
-        }}
-      />
 
     </div>
   );

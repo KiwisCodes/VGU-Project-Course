@@ -11,15 +11,11 @@ interface ProjectContextType {
   tasks: Task[];
   memberNotes: Record<string, string>;
   driveFolders: DriveFolder[];
-  tags: string[];
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
   isSupabase: boolean;
   syncStatus: 'synced' | 'syncing' | 'offline';
-  // Tag Actions
-  addTag: (tag: string) => void;
-  deleteTag: (tag: string) => { success: boolean; message: string };
   // Task Actions
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (task: Task) => void;
@@ -47,15 +43,6 @@ interface ProjectContextType {
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export const DEFAULT_TAGS = [
-  'Data Engineering',
-  'Fine-Tuning',
-  'RAG / KG',
-  'Multi-Agents',
-  'DevOps / Report',
-  'Evaluation'
-];
-
 const STORAGE_KEYS = {
   MEMBERS: 'vgu_project_members_v2',
   TASKS: 'vgu_project_tasks_v5',
@@ -66,7 +53,6 @@ const STORAGE_KEYS = {
   NOTES: 'vgu_project_notes_v2',
   LEGACY_NOTES_V1: 'vgu_project_notes_v1',
   DRIVE: 'vgu_project_drive_v1',
-  TAGS: 'vgu_project_tags_v1',
   THEME: 'vgu_project_theme_preference'
 };
 
@@ -78,7 +64,6 @@ export const normalizeTask = (t: any): Task => {
     assigneeIds = [t.assigneeId];
   }
   const lectureId = typeof t.lectureId === 'number' ? t.lectureId : (typeof t.week === 'number' ? t.week : 1);
-  const tag = t.tag || t.pillar || 'Data Engineering';
   const memberStatuses = (t.memberStatuses && typeof t.memberStatuses === 'object' && !Array.isArray(t.memberStatuses))
     ? { ...t.memberStatuses }
     : {};
@@ -97,8 +82,6 @@ export const normalizeTask = (t: any): Task => {
     link: t.link || '',
     assigneeIds,
     lectureId,
-    tag,
-    pillar: tag,
     memberStatuses,
     status,
   };
@@ -136,8 +119,6 @@ function mapDbTaskToTask(row: any): Task {
     description: row.description || '',
     link: row.link || '',
     lectureId: row.lecture_id || 1,
-    tag: row.tag || 'Data Engineering',
-    pillar: row.tag || 'Data Engineering',
     priority: row.priority || 'Medium',
     status: row.status || 'Backlog',
     dueDate: row.due_date ? String(row.due_date).split('T')[0] : new Date().toISOString().split('T')[0],
@@ -181,7 +162,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [tasks, setTasks] = useState<Task[]>([]);
   const [memberNotes, setMemberNotes] = useState<Record<string, string>>({});
   const [driveFolders, setDriveFolders] = useState<DriveFolder[]>(DRIVE_FOLDERS);
-  const [tags, setTags] = useState<string[]>(DEFAULT_TAGS);
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
   const [isHydrated, setIsHydrated] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
@@ -250,16 +230,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setDriveFolders(folderRows.map(mapDbFolderToFolder));
       }
 
-      // 5. Fetch Tags
-      const { data: tagRows, error: tagErr } = await supabase
-        .from('tags')
-        .select('name')
-        .order('name', { ascending: true });
-
-      if (!tagErr && tagRows && tagRows.length > 0) {
-        setTags(Array.from(new Set([...DEFAULT_TAGS, ...tagRows.map((t: any) => t.name)])));
-      }
-
       setSyncStatus('synced');
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
@@ -326,16 +296,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setDriveFolders(JSON.parse(storedDrive));
         } catch (e) {}
       }
-
-      const storedTags = localStorage.getItem(STORAGE_KEYS.TAGS);
-      if (storedTags) {
-        try {
-          const parsed = JSON.parse(storedTags);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setTags(Array.from(new Set([...DEFAULT_TAGS, ...parsed])));
-          }
-        } catch (e) {}
-      }
     } catch (e) {
       console.error('Failed to load project state from localStorage:', e);
     } finally {
@@ -368,9 +328,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drive_files' }, () => {
         fetchSupabaseData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, () => {
-        fetchSupabaseData();
-      })
       .subscribe();
 
     return () => {
@@ -386,10 +343,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
       localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(memberNotes));
       localStorage.setItem(STORAGE_KEYS.DRIVE, JSON.stringify(driveFolders));
-      localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(tags));
       localStorage.setItem(STORAGE_KEYS.THEME, theme);
     } catch (e) {}
-  }, [members, tasks, memberNotes, driveFolders, tags, theme, isHydrated]);
+  }, [members, tasks, memberNotes, driveFolders, theme, isHydrated]);
 
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
@@ -401,65 +357,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTheme(next);
   };
 
-  // --- Tag Methods ---
-  const addTag = async (newTag: string) => {
-    const trimmed = newTag.trim();
-    if (!trimmed) return;
-    setTags((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('tags').upsert({ name: trimmed }, { onConflict: 'name' });
-      } catch (err) {
-        console.error('Failed to add tag to Supabase:', err);
-      }
-    }
-  };
-
-  const deleteTag = (tagToDelete: string): { success: boolean; message: string } => {
-    const trimmed = tagToDelete.trim();
-    if (!trimmed) {
-      return { success: false, message: 'Tag name cannot be empty.' };
-    }
-    const associatedTasksCount = tasks.filter(
-      (t) => (t.tag || t.pillar || '').trim().toLowerCase() === trimmed.toLowerCase()
-    ).length;
-
-    if (associatedTasksCount > 0) {
-      return {
-        success: false,
-        message: `Cannot delete tag "${trimmed}": It is currently assigned to ${associatedTasksCount} task${associatedTasksCount > 1 ? 's' : ''}. Reassign or remove the tag from those tasks first.`
-      };
-    }
-
-    setTags((prev) => prev.filter((t) => t.toLowerCase() !== trimmed.toLowerCase()));
-
-    if (isSupabaseConfigured) {
-      supabase.from('tags').delete().eq('name', trimmed).then();
-    }
-
-    return {
-      success: true,
-      message: `Tag "${trimmed}" deleted successfully.`
-    };
-  };
-
   // --- Task Methods ---
   const addTask = async (taskData: Omit<Task, 'id' | 'createdAt'>) => {
-    const tag = taskData.tag || (taskData as any).pillar || 'Data Engineering';
     const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'task-' + Date.now();
     const today = new Date().toISOString().split('T')[0];
 
     const newTask: Task = {
       ...taskData,
-      tag,
-      pillar: tag,
       id: tempId,
       createdAt: today,
     };
 
     setTasks((prev) => [newTask, ...prev]);
-    addTag(tag);
 
     if (isSupabaseConfigured) {
       try {
@@ -471,9 +380,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             description: taskData.description || '',
             link: taskData.link || null,
             lecture_id: taskData.lectureId || 1,
-            tag,
             priority: taskData.priority || 'High',
-            status: taskData.status || 'Backlog',
+            status: taskData.status || 'In Progress',
             due_date: taskData.dueDate || today,
           })
           .select()
@@ -485,7 +393,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const assigneeRows = taskData.assigneeIds.map((memberId) => ({
             task_id: inserted.id,
             member_id: memberId,
-            status: taskData.memberStatuses?.[memberId] || taskData.status || 'Backlog',
+            status: taskData.memberStatuses?.[memberId] || taskData.status || 'In Progress',
           }));
           await supabase.from('task_assignees').insert(assigneeRows);
         }
@@ -523,7 +431,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             description: taskToSave.description,
             link: taskToSave.link || null,
             lecture_id: taskToSave.lectureId,
-            tag: taskToSave.tag,
             priority: taskToSave.priority,
             status: taskToSave.status,
             due_date: taskToSave.dueDate,
@@ -850,7 +757,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       tasks,
       memberNotes,
       driveFolders,
-      tags,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -871,7 +777,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setMemberNotes(parsed.memberNotes);
         }
         if (Array.isArray(parsed.driveFolders)) setDriveFolders(parsed.driveFolders);
-        if (Array.isArray(parsed.tags)) setTags(Array.from(new Set([...DEFAULT_TAGS, ...parsed.tags])));
         return true;
       }
       return false;
@@ -886,13 +791,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTasks(INITIAL_TASKS.map(normalizeTask));
     setMemberNotes({});
     setDriveFolders(DRIVE_FOLDERS);
-    setTags(DEFAULT_TAGS);
     try {
       localStorage.removeItem(STORAGE_KEYS.MEMBERS);
       localStorage.removeItem(STORAGE_KEYS.TASKS);
       localStorage.removeItem(STORAGE_KEYS.NOTES);
       localStorage.removeItem(STORAGE_KEYS.DRIVE);
-      localStorage.removeItem(STORAGE_KEYS.TAGS);
     } catch (e) {}
   };
 
@@ -903,14 +806,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         tasks,
         memberNotes,
         driveFolders,
-        tags,
         theme,
         setTheme,
         toggleTheme,
         isSupabase: isSupabaseConfigured,
         syncStatus,
-        addTag,
-        deleteTag,
         addTask,
         updateTask,
         deleteTask,

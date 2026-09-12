@@ -9,7 +9,6 @@ import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus } 
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TaskTableView } from '@/components/TaskTableView';
-import { TagManagerModal } from '@/components/TagManagerModal';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -30,7 +29,6 @@ import {
   Users2,
   BookOpen,
   FileText,
-  Tag as TagIcon,
   Link as LinkIcon
 } from 'lucide-react';
 
@@ -45,8 +43,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     members, 
     tasks, 
     memberNotes, 
-    tags, 
-    addTag, 
     setMemberNote, 
     setMemberLectureNote, 
     getMemberLectureNote, 
@@ -78,7 +74,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'done'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
 
   // Notes state (1 note per lecture per member)
   const [activeNoteLecture, setActiveNoteLecture] = useState<number>(1);
@@ -86,16 +81,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [notesViewMode, setNotesViewMode] = useState<'my' | 'team'>('my');
 
-  // Available dynamic tags
-  const allAvailableTags = Array.from(
-    new Set([...tags, ...tasks.map(t => t.tag || t.pillar).filter(Boolean)])
-  );
-
   // Modal State for Task Create/Edit
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [isCreatingNewTag, setIsCreatingNewTag] = useState(false);
-  const [customTagInput, setCustomTagInput] = useState('');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -103,7 +91,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     link: '',
     assigneeIds: [] as string[],
     lectureId: 1,
-    tag: 'Data Engineering',
     priority: 'High' as Priority,
     status: 'In Progress' as TaskStatus,
     dueDate: new Date().toISOString().split('T')[0]
@@ -176,27 +163,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     setTimeout(() => setIsSavedNotice(false), 2500);
   };
 
-  const handleConfirmNewTag = () => {
-    const trimmed = customTagInput.trim();
-    if (trimmed) {
-      addTag(trimmed);
-      setFormData(prev => ({ ...prev, tag: trimmed }));
-      setCustomTagInput('');
-      setIsCreatingNewTag(false);
-    }
-  };
-
   const openCreateModal = (defaultStatus: TaskStatus = 'In Progress') => {
     setEditingTaskId(null);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: '',
       description: '',
       link: '',
       assigneeIds: [member.id],
       lectureId: selectedLecture === 'all' ? 1 : selectedLecture,
-      tag: allAvailableTags[0] || 'Data Engineering',
       priority: 'High',
       status: defaultStatus,
       dueDate: new Date().toISOString().split('T')[0]
@@ -206,15 +180,12 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
 
   const openEditModal = (task: Task) => {
     setEditingTaskId(task.id);
-    setIsCreatingNewTag(false);
-    setCustomTagInput('');
     setFormData({
       title: task.title,
       description: task.description,
       link: task.link || '',
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : [member.id]),
       lectureId: task.lectureId || task.week || 1,
-      tag: task.tag || task.pillar || 'Data Engineering',
       priority: task.priority,
       status: getTaskMemberStatus(task, member.id),
       dueDate: task.dueDate
@@ -249,38 +220,16 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
           ...existing,
           ...formData,
           link: trimmedLink,
-          pillar: formData.tag,
           memberStatuses
         });
       }
     } else {
       addTask({
         ...formData,
-        link: trimmedLink,
-        pillar: formData.tag
+        link: trimmedLink
       });
     }
     setIsModalOpen(false);
-  };
-
-  const getTagBadgeClass = (tag?: string) => {
-    if (!tag) return 'pill-cyan';
-    switch (tag) {
-      case 'RAG / KG': return 'pill-blue';
-      case 'Fine-Tuning': return 'pill-purple';
-      case 'Multi-Agents': return 'pill-emerald';
-      case 'Data Engineering': return 'pill-amber';
-      case 'DevOps / Report': return 'pill-rose';
-      case 'Evaluation': return 'pill-purple';
-      default: {
-        const palette = ['pill-blue', 'pill-emerald', 'pill-purple', 'pill-amber', 'pill-rose', 'pill-cyan'];
-        let hash = 0;
-        for (let i = 0; i < tag.length; i++) {
-          hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return palette[Math.abs(hash) % palette.length];
-      }
-    }
   };
 
   return (
@@ -935,81 +884,8 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
                 </div>
               </div>
 
-              {/* Tag, Priority, Status */}
-              <div className="grid grid-cols-3 gap-3">
-                {/* Tag */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                      Tag
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setIsTagManagerOpen(true)}
-                        className="text-[9px] font-bold text-muted hover:text-blue-500 hover:underline cursor-pointer"
-                      >
-                        Manage
-                      </button>
-                      {!isCreatingNewTag && (
-                        <button
-                          type="button"
-                          onClick={() => setIsCreatingNewTag(true)}
-                          className="text-[9px] font-bold text-blue-500 hover:underline cursor-pointer"
-                        >
-                          + New
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isCreatingNewTag ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="Tag..."
-                        value={customTagInput}
-                        onChange={(e) => setCustomTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleConfirmNewTag();
-                          }
-                        }}
-                        className="w-full px-1.5 py-1 rounded-lg text-xs border font-semibold"
-                        style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleConfirmNewTag}
-                        className="px-1.5 py-1 rounded-lg text-[10px] font-bold text-white bg-blue-600 cursor-pointer"
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      value={formData.tag}
-                      onChange={(e) => {
-                        if (e.target.value === '__add_new__') {
-                          setIsCreatingNewTag(true);
-                        } else if (e.target.value === '__manage__') {
-                          setIsTagManagerOpen(true);
-                        } else {
-                          setFormData({ ...formData, tag: e.target.value });
-                        }
-                      }}
-                      className="w-full px-2 py-1.5 rounded-xl text-xs border font-semibold cursor-pointer"
-                      style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
-                    >
-                      {allAvailableTags.map(t => <option key={t} value={t}>{t}</option>)}
-                      <option value="__add_new__" className="font-bold text-blue-500">+ Add New...</option>
-                      <option value="__manage__" className="font-bold text-slate-500">⚙ Manage / Delete Tags...</option>
-                    </select>
-                  )}
-                </div>
-
+              {/* Priority & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>
                     Priority
@@ -1061,17 +937,6 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
           </div>
         </div>
       )}
-
-      {/* Tag Manager Modal */}
-      <TagManagerModal
-        isOpen={isTagManagerOpen}
-        onClose={() => setIsTagManagerOpen(false)}
-        onTagDeleted={(deletedTag) => {
-          if (formData.tag === deletedTag) {
-            setFormData(prev => ({ ...prev, tag: tags[0] || 'Data Engineering' }));
-          }
-        }}
-      />
 
     </div>
   );
