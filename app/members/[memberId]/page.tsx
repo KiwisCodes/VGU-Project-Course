@@ -1029,12 +1029,13 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
                     Status
                   </label>
                   <select
-                    value={formData.status}
+                    value={formData.status === 'Done' ? 'Done' : 'In Progress'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
                     className="w-full px-2 py-1.5 rounded-xl text-xs border font-semibold"
                     style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
                   >
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="In Progress">New</option>
+                    <option value="Done">Done</option>
                   </select>
                 </div>
               </div>

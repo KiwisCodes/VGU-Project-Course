@@ -95,20 +95,26 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
     }
 
     // On shared /tasks page:
-    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
+    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
     const isMultiAssignee = assigneeList.length > 1;
 
-    // If logged in user is a member on multi-assignee task and not team leader, toggle their own progress
-    if (profile?.id && !isTeamLeader && isMultiAssignee && assigneeList.includes(profile.id)) {
-      const isMemberDone = getTaskMemberStatus(task, profile.id) === 'Done';
-      const nextMemberStatus: TaskStatus = isMemberDone ? 'In Progress' : 'Done';
-      if (onUpdateMemberTaskStatus) {
-        onUpdateMemberTaskStatus(task.id, profile.id, nextMemberStatus);
-      }
+    // Rule: On the shared page, an individual member cannot change the status of the shared deliverable.
+    // They can only update their own progress in their own view or by clicking their member chip.
+    // Only Team Leader can directly override the overall deliverable status for multi-assignee tasks.
+    if (isMultiAssignee && !isTeamLeader) {
+      showNotification(
+        'On the shared Tasks page, deliverables reflect team progress. To update your individual progress, click your member chip below or visit your personal portal. Deliverables become Done when all assignees finish.'
+      );
       return;
     }
 
-    // Otherwise (Team Leader or single assignee), toggle the full task
+    // If single assignee: only that assignee or Team Leader can toggle
+    if (!isMultiAssignee && assigneeList.length === 1 && !isTeamLeader && profile?.id && !assigneeList.includes(profile.id)) {
+      showNotification('Access restriction: Only the assigned member or Team Leader can change this task status.');
+      return;
+    }
+
+    // Otherwise (Team Leader or authorized single assignee), toggle the full deliverable
     const nextStatus: TaskStatus = isDone ? 'In Progress' : 'Done';
     const newMemberStatuses: Record<string, TaskStatus> = {};
     assigneeList.forEach(mId => {

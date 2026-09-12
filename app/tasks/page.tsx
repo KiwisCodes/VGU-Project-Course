@@ -100,7 +100,7 @@ function TasksContent() {
     dueDate: new Date().toISOString().split('T')[0]
   });
 
-  const openCreateModal = (defaultStatus: TaskStatus = 'Backlog') => {
+  const openCreateModal = (defaultStatus: TaskStatus = 'In Progress') => {
     setEditingTaskId(null);
     setIsCreatingNewTag(false);
     setCustomTagInput('');
@@ -271,7 +271,7 @@ function TasksContent() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => openCreateModal('Backlog')}
+            onClick={() => openCreateModal('In Progress')}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all cursor-pointer"
             style={{ backgroundColor: 'var(--accent-blue)' }}
           >
@@ -442,7 +442,6 @@ function TasksContent() {
           onEditTask={openEditModal}
           onDeleteTask={deleteTask}
           onUpdateMemberTaskStatus={setMemberTaskStatus}
-          currentMemberId={profile?.id}
           onNotice={(msg) => {
             setNoticeMessage(msg);
             setTimeout(() => setNoticeMessage(null), 4000);
@@ -738,12 +737,13 @@ function TasksContent() {
                     Status
                   </label>
                   <select
-                    value={formData.status}
+                    value={formData.status === 'Done' ? 'Done' : 'In Progress'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
                     className="w-full px-3 py-2 rounded-xl text-xs border font-semibold cursor-pointer"
                     style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-strong)', color: 'var(--text-main)' }}
                   >
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="In Progress">New</option>
+                    <option value="Done">Done</option>
                   </select>
                 </div>
               </div>

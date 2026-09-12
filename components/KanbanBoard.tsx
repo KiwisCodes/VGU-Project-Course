@@ -10,7 +10,8 @@ import {
   Plus, 
   Users2, 
   Zap, 
-  GripVertical 
+  GripVertical,
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -26,7 +27,32 @@ interface KanbanBoardProps {
   onUpdateMemberTaskStatus?: (taskId: string, memberId: string, status: TaskStatus) => void;
 }
 
-const STATUSES: TaskStatus[] = ['Backlog', 'In Progress', 'Review', 'Done'];
+type KanbanColumnType = 'new' | 'done';
+
+interface ColumnDef {
+  type: KanbanColumnType;
+  title: string;
+  badgeLabel: string;
+  badgeClass: string;
+  targetStatus: TaskStatus;
+}
+
+const COLUMNS: ColumnDef[] = [
+  {
+    type: 'new',
+    title: 'New Tasks',
+    badgeLabel: 'New',
+    badgeClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    targetStatus: 'In Progress',
+  },
+  {
+    type: 'done',
+    title: 'Done Tasks',
+    badgeLabel: 'Done',
+    badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    targetStatus: 'Done',
+  },
+];
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks,
@@ -41,17 +67,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const { user, profile, canMoveTask, canEditTaskStatus } = useAuth();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<KanbanColumnType | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   const isDraggingRef = useRef(false);
   const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const getTaskStatusForView = (task: Task): TaskStatus => {
+  const isTaskDone = (task: Task): boolean => {
     if (currentMemberId) {
-      return getTaskMemberStatus(task, currentMemberId);
+      return getTaskMemberStatus(task, currentMemberId) === 'Done';
     }
-    return task.status;
+    return task.status === 'Done';
   };
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -67,30 +93,29 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       isDraggingRef.current = false;
     }, 200);
     setDraggedTaskId(null);
-    setDragOverStatus(null);
+    setDragOverCol(null);
   };
 
-  const handleDragOver = (e: React.DragEvent, status: TaskStatus) => {
+  const handleDragOver = (e: React.DragEvent, colType: KanbanColumnType) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverStatus !== status) {
-      setDragOverStatus(status);
+    if (dragOverCol !== colType) {
+      setDragOverCol(colType);
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, status: TaskStatus) => {
-    // If still inside the column or child elements, do not clear
+  const handleDragLeave = (e: React.DragEvent, colType: KanbanColumnType) => {
     if (e.currentTarget && e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
       return;
     }
-    if (dragOverStatus === status) {
-      setDragOverStatus(null);
+    if (dragOverCol === colType) {
+      setDragOverCol(null);
     }
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: TaskStatus) => {
+  const handleDrop = (e: React.DragEvent, targetCol: KanbanColumnType) => {
     e.preventDefault();
-    setDragOverStatus(null);
+    setDragOverCol(null);
     const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
     if (!taskId) return;
 
@@ -106,29 +131,125 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       return;
     }
 
-    if (currentMemberId && onUpdateMemberTaskStatus) {
-      // Personal member portal: update this specific member's deliverable status
+    const targetStatus: TaskStatus = targetCol === 'done' ? 'Done' : 'In Progress';
+
+    // 1. Personal member portal: update this specific member's deliverable status
+    if (currentMemberId) {
       const currentMemberStatus = getTaskMemberStatus(task, currentMemberId);
       if (currentMemberStatus !== targetStatus) {
-        onUpdateMemberTaskStatus(task.id, currentMemberId, targetStatus);
+        if (onUpdateMemberTaskStatus) {
+          onUpdateMemberTaskStatus(task.id, currentMemberId, targetStatus);
+        } else {
+          const updatedStatuses = { ...(task.memberStatuses || {}), [currentMemberId]: targetStatus };
+          const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
+          const allDone = assigneeList.length > 0 && assigneeList.every(mId => updatedStatuses[mId] === 'Done');
+          onUpdateTask({
+            ...task,
+            status: allDone ? 'Done' : 'In Progress',
+            memberStatuses: updatedStatuses
+          });
+        }
       }
-    } else {
-      // Shared team board (/tasks, /lectures): update overall task status AND all assignees
-      if (task.status !== targetStatus) {
-        const newMemberStatuses: Record<string, TaskStatus> = {};
-        const assignees = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
-        assignees.forEach(mId => {
-          newMemberStatuses[mId] = targetStatus;
-        });
+      setDraggedTaskId(null);
+      return;
+    }
 
-        onUpdateTask({
-          ...task,
-          status: targetStatus,
-          memberStatuses: newMemberStatuses
-        });
-      }
+    // 2. Shared team board (/tasks, /lectures):
+    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
+    const isMultiAssignee = assigneeList.length > 1;
+
+    // Rule: On the shared page, an individual member cannot change the status of the shared deliverable.
+    // Only Team Leader can directly override the overall deliverable status for multi-assignee tasks.
+    if (isMultiAssignee && !profile?.is_team_leader) {
+      setNoticeMessage(
+        'On the shared Tasks page, deliverables reflect team progress. To update your individual progress, click your member chip or visit your personal portal. Deliverables become Done when all assignees finish.'
+      );
+      setTimeout(() => setNoticeMessage(null), 4500);
+      setDraggedTaskId(null);
+      return;
+    }
+
+    // If single assignee: only that assignee or Team Leader can move
+    if (!isMultiAssignee && assigneeList.length === 1 && !profile?.is_team_leader && profile?.id && !assigneeList.includes(profile.id)) {
+      setNoticeMessage('Access restriction: Only the assigned member or Team Leader can move this deliverable.');
+      setTimeout(() => setNoticeMessage(null), 4000);
+      setDraggedTaskId(null);
+      return;
+    }
+
+    // Otherwise, update overall task status AND all assignees
+    if (task.status !== targetStatus) {
+      const newMemberStatuses: Record<string, TaskStatus> = {};
+      assigneeList.forEach(mId => {
+        newMemberStatuses[mId] = targetStatus;
+      });
+
+      onUpdateTask({
+        ...task,
+        status: targetStatus,
+        memberStatuses: newMemberStatuses
+      });
     }
     setDraggedTaskId(null);
+  };
+
+  const handleToggleCardStatus = (task: Task) => {
+    const cardDone = isTaskDone(task);
+    const targetCol: KanbanColumnType = cardDone ? 'new' : 'done';
+    const targetStatus: TaskStatus = targetCol === 'done' ? 'Done' : 'In Progress';
+
+    const check = canMoveTask(task, currentMemberId);
+    if (!check.allowed) {
+      setNoticeMessage(check.reason || 'Permission denied: unable to modify deliverable.');
+      setTimeout(() => setNoticeMessage(null), 4000);
+      return;
+    }
+
+    // 1. Personal member portal
+    if (currentMemberId) {
+      if (onUpdateMemberTaskStatus) {
+        onUpdateMemberTaskStatus(task.id, currentMemberId, targetStatus);
+      } else {
+        const updatedStatuses = { ...(task.memberStatuses || {}), [currentMemberId]: targetStatus };
+        const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
+        const allDone = assigneeList.length > 0 && assigneeList.every(mId => updatedStatuses[mId] === 'Done');
+        onUpdateTask({
+          ...task,
+          status: allDone ? 'Done' : 'In Progress',
+          memberStatuses: updatedStatuses
+        });
+      }
+      return;
+    }
+
+    // 2. Shared board
+    const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
+    const isMultiAssignee = assigneeList.length > 1;
+
+    if (isMultiAssignee && !profile?.is_team_leader) {
+      setNoticeMessage(
+        'On the shared Tasks page, deliverables reflect team progress. To update your individual progress, click your member chip or visit your personal portal. Deliverables become Done when all assignees finish.'
+      );
+      setTimeout(() => setNoticeMessage(null), 4500);
+      return;
+    }
+
+    if (!isMultiAssignee && assigneeList.length === 1 && !profile?.is_team_leader && profile?.id && !assigneeList.includes(profile.id)) {
+      setNoticeMessage('Access restriction: Only the assigned member or Team Leader can modify this deliverable.');
+      setTimeout(() => setNoticeMessage(null), 4000);
+      return;
+    }
+
+    const newMemberStatuses: Record<string, TaskStatus> = {};
+    assigneeList.forEach(mId => {
+      newMemberStatuses[mId] = targetStatus;
+    });
+
+    onUpdateTask({
+      ...task,
+      status: targetStatus,
+      memberStatuses: newMemberStatuses
+    });
   };
 
   const getTagBadgeClass = (tag?: string) => {
@@ -225,18 +346,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-        {STATUSES.map(status => {
-          const columnTasks = tasks.filter(t => getTaskStatusForView(t) === status);
-          const isColumnDragOver = dragOverStatus === status;
+      {/* 2-Column Kanban Grid: New Tasks and Done Tasks */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        {COLUMNS.map(col => {
+          const columnTasks = tasks.filter(t => (col.type === 'done' ? isTaskDone(t) : !isTaskDone(t)));
+          const isColumnDragOver = dragOverCol === col.type;
 
           return (
             <div
-              key={status}
-              onDragOver={(e) => handleDragOver(e, status)}
-              onDragLeave={(e) => handleDragLeave(e, status)}
-              onDrop={(e) => handleDrop(e, status)}
-              className={`bento-card p-3.5 min-w-0 transition-all ${
+              key={col.type}
+              onDragOver={(e) => handleDragOver(e, col.type)}
+              onDragLeave={(e) => handleDragLeave(e, col.type)}
+              onDrop={(e) => handleDrop(e, col.type)}
+              className={`bento-card p-4 min-w-0 transition-all ${
                 isColumnDragOver 
                   ? 'ring-2 ring-blue-500 scale-[1.01]' 
                   : ''
@@ -247,10 +369,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               }}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-2 mb-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+              <div className="flex items-center justify-between pb-2.5 mb-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
                 <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-xs tracking-tight" style={{ color: 'var(--text-main)' }}>
-                    {status}
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${col.badgeClass}`}>
+                    {col.badgeLabel}
+                  </span>
+                  <span className="font-extrabold text-sm tracking-tight" style={{ color: 'var(--text-main)' }}>
+                    {col.title}
                   </span>
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     {columnTasks.length}
@@ -260,8 +385,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 {onCreateTaskInStatus && (
                   <button
                     type="button"
-                    onClick={() => onCreateTaskInStatus(status)}
-                    title={`Add task to ${status}`}
+                    onClick={() => onCreateTaskInStatus(col.targetStatus)}
+                    title={`Add task to ${col.title}`}
                     className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 transition-all text-muted cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -270,11 +395,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Tasks Cards Container */}
-              <div className="space-y-3 min-h-[140px]">
+              <div className="space-y-3 min-h-[160px]">
                 {columnTasks.map(task => {
                   const taskLecture = task.lectureId || task.week || 1;
                   const assigneeList = Array.isArray(task.assigneeIds) ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
                   const isBeingDragged = draggedTaskId === task.id;
+                  const cardDone = isTaskDone(task);
 
                   return (
                     <div
@@ -293,25 +419,46 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       }`}
                       style={{ backgroundColor: 'var(--bg-surface)' }}
                     >
-                      {/* Grip & Badges Header */}
+                      {/* Header: Priority, Lecture Badge, Link */}
                       <div className="flex items-center justify-between gap-1.5 mb-2">
                         <div className="flex items-center gap-1.5">
                           <GripVertical className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
-                          <span className={`pill-badge text-[10px] py-0.5 px-2 ${getTagBadgeClass(task.tag || task.pillar)}`}>
-                            {task.tag || task.pillar}
+                          <span className="pill-badge pill-blue text-[10px] py-0.5 px-2">
+                            L{taskLecture}
                           </span>
+                          {task.link && (
+                            <a
+                              href={task.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open resource link"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-all hover:underline"
+                              style={{
+                                backgroundColor: 'var(--bg-surface-elevated)',
+                                color: 'var(--accent-blue)',
+                                borderColor: 'var(--border-subtle)'
+                              }}
+                            >
+                              <span>Link</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
                         </div>
                         <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${getPriorityBadgeClass(task.priority)}`}>
                           {task.priority}
                         </span>
                       </div>
 
-                      {/* Title & Description */}
-                      <h4 className="font-bold text-xs leading-snug mb-1" style={{ color: 'var(--text-main)' }}>
+                      {/* Title & Description (Taste: NO strike-through, clear typography) */}
+                      <h4 
+                        className={`font-bold text-xs leading-snug mb-1 ${cardDone ? 'opacity-70' : ''}`} 
+                        style={{ color: 'var(--text-main)' }}
+                      >
                         {task.title}
                       </h4>
                       <p className="text-[11px] line-clamp-2 leading-relaxed mb-2" style={{ color: 'var(--text-muted)' }}>
-                        {task.description}
+                        {task.description || '-'}
                       </p>
 
                       {/* Member Completion Progress & Interactive Chips (for multi-assignee tasks) */}
@@ -349,7 +496,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             {assigneeList.map(mId => {
                               const member = members.find(m => m.id === mId);
                               if (!member) return null;
-                              const isDone = getTaskMemberStatus(task, mId) === 'Done';
+                              const isMemberDone = getTaskMemberStatus(task, mId) === 'Done';
                               const shortName = getMemberShortName(member.name);
                               return (
                                 <button
@@ -357,7 +504,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                   type="button"
                                   draggable={false}
                                   onDragStart={(e) => e.stopPropagation()}
-                                  title={`${member.name}: ${isDone ? 'Done (Click to mark In Progress)' : 'In Progress (Click to mark Done)'}`}
+                                  title={`${member.name}: ${isMemberDone ? 'Done (Click to mark In Progress)' : 'In Progress (Click to mark Done)'}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (profile && !canEditTaskStatus(mId)) {
@@ -366,17 +513,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                       return;
                                     }
                                     if (onUpdateMemberTaskStatus) {
-                                      onUpdateMemberTaskStatus(task.id, mId, isDone ? 'In Progress' : 'Done');
+                                      onUpdateMemberTaskStatus(task.id, mId, isMemberDone ? 'In Progress' : 'Done');
                                     }
                                   }}
                                   className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                    isDone 
+                                    isMemberDone 
                                       ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
                                       : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                                   }`}
                                 >
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDone ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                                  <span>{isDone ? `✓ ${shortName}` : shortName}</span>
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMemberDone ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                  <span>{isMemberDone ? `✓ ${shortName}` : shortName}</span>
                                 </button>
                               );
                             })}
@@ -384,16 +531,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </div>
                       )}
 
-                      {/* Footer: Assignees, Lecture Badge, Due Date */}
+                      {/* Footer: Assignees, Due Date */}
                       <div className="pt-2 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border-subtle)' }}>
                         <div className="min-w-0 flex-1">
                           {renderAssignees(assigneeList)}
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="pill-badge pill-blue text-[9px] py-0 px-1.5">
-                            L{taskLecture}
-                          </span>
+                        <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] font-medium flex items-center gap-1" style={{ color: 'var(--text-faint)' }}>
                             <Clock className="w-2.5 h-2.5" />
                             {task.dueDate.slice(5)}
@@ -401,52 +545,34 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </div>
                       </div>
 
-                      {/* Quick Action Footer on Hover */}
+                      {/* Quick Action Footer: 2-State Toggle + Edit + Delete */}
                       <div 
-                        className="mt-2 pt-2 border-t flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity" 
+                        className="mt-2 pt-2 border-t flex items-center justify-between" 
                         style={{ borderColor: 'var(--border-subtle)' }} 
                         onClick={e => e.stopPropagation()}
                         onDragStart={e => e.stopPropagation()}
                       >
-                        <select
-                          value={currentMemberId ? getTaskMemberStatus(task, currentMemberId) : task.status}
-                          onChange={(e) => {
-                            const newStatus = e.target.value as TaskStatus;
-                            const check = canMoveTask(task, currentMemberId);
-                            if (!check.allowed) {
-                              setNoticeMessage(check.reason || 'Permission denied: unable to modify deliverable.');
-                              setTimeout(() => setNoticeMessage(null), 4000);
-                              return;
-                            }
-
-                            if (currentMemberId && onUpdateMemberTaskStatus) {
-                              onUpdateMemberTaskStatus(task.id, currentMemberId, newStatus);
-                            } else {
-                              const newMemberStatuses: Record<string, TaskStatus> = {};
-                              const assignees = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
-                              assignees.forEach(mId => {
-                                newMemberStatuses[mId] = newStatus;
-                              });
-
-                              onUpdateTask({
-                                ...task,
-                                status: newStatus,
-                                memberStatuses: newMemberStatuses
-                              });
-                            }
-                          }}
-                          className="text-[10px] font-bold py-0.5 px-1.5 rounded border cursor-pointer"
-                          style={{ backgroundColor: 'var(--bg-surface-elevated)', borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}
+                        {/* 2-State Status Button matching Table View */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCardStatus(task)}
+                          title={`Toggle status (currently ${cardDone ? 'Done' : 'New'})`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-all cursor-pointer border shadow-xs hover:opacity-90 active:scale-95 ${
+                            cardDone
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20'
+                          }`}
                         >
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                          <span className={`w-1.5 h-1.5 rounded-full ${cardDone ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                          <span>{cardDone ? 'Done' : 'New'}</span>
+                        </button>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => onEditTask(task)}
                             title="Edit Task"
-                            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-muted"
+                            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-muted cursor-pointer"
                           >
                             <Edit3 className="w-3 h-3" />
                           </button>
@@ -456,7 +582,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                               if (confirm('Delete this task?')) onDeleteTask(task.id);
                             }}
                             title="Delete Task"
-                            className="p-1 rounded hover:bg-red-50 hover:text-red-500 transition-all text-muted"
+                            className="p-1 rounded hover:bg-red-50 hover:text-red-500 transition-all text-muted cursor-pointer"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -467,8 +593,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 })}
 
                 {columnTasks.length === 0 && (
-                  <div className="py-8 text-center text-xs border border-dashed rounded-xl" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-faint)' }}>
-                    Drag tasks here
+                  <div className="py-10 text-center text-xs border border-dashed rounded-xl" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-faint)' }}>
+                    {col.type === 'new' 
+                      ? 'No new deliverables. All tasks complete!' 
+                      : 'Drag completed tasks here'
+                    }
                   </div>
                 )}
               </div>
