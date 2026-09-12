@@ -125,11 +125,11 @@ export const LECTURE_SESSIONS: LectureSession[] = [
   {
     week: 6,
     date: 'Upcoming',
-    title: 'Mid-term Sprint Progress & Demo',
+    title: 'Sprint Review & Weekly Progress Demo',
     folderName: 'Lecture_06_YYYY-MM-DD',
     status: 'upcoming',
     phase: 'Modeling',
-    summary: 'Upcoming session: Live demonstration of data preprocessing and baseline fine-tuned model inferences.',
+    summary: 'Upcoming session: Weekly agile demo on data preprocessing and baseline fine-tuned model inferences.',
     materials: [],
     keyActionItems: [
       'Session not yet conducted - content will be posted after lecture.'
@@ -151,11 +151,11 @@ export const LECTURE_SESSIONS: LectureSession[] = [
   {
     week: 8,
     date: 'Upcoming',
-    title: 'Midterm Milestone Evaluation & Defense',
+    title: 'Sprint Review & Continuous Assessment Demo',
     folderName: 'Lecture_08_YYYY-MM-DD',
     status: 'upcoming',
     phase: 'Evaluation',
-    summary: 'Upcoming session: Midterm project defense and continuous assessment evaluation.',
+    summary: 'Upcoming session: Weekly progress demo covering aligned diagnostic predictions, safety benchmarks, and continuous assessment.',
     materials: [],
     keyActionItems: [
       'Session not yet conducted - content will be posted after lecture.'

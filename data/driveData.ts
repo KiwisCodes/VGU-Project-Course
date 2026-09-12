@@ -125,7 +125,7 @@ export const DRIVE_FOLDERS: DriveFolder[] = [
     lectureNumber: 8,
     date: 'Upcoming',
     status: 'upcoming',
-    description: 'Upcoming session: Midterm Milestone Demo & Faculty Progress Defense.',
+    description: 'Upcoming session: Sprint Review, Weekly Demo & Continuous Assessment.',
     files: []
   },
   {
