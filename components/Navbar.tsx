@@ -20,6 +20,7 @@ import {
   LogIn,
   Lock
 } from 'lucide-react';
+import { VguIcon } from '@/components/VguLogo';
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
@@ -55,20 +56,23 @@ export const Navbar: React.FC = () => {
     <header className="border-b sticky top-0 z-40 backdrop-blur-md" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-page)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
-        {/* Brand */}
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight text-sm sm:text-base" style={{ color: 'var(--text-main)' }}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-xs shadow-sm" style={{ background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))' }}>
-              VGU
-            </div>
-            <div className="flex flex-col">
-              <span className="leading-none text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent-blue)' }}>
-                CS Project 10 ECTS
-              </span>
-              <span className="leading-tight font-extrabold text-xs sm:text-sm">
-                Small Multimodal Models
-              </span>
-            </div>
+        {/* Brand: VGU Icon & Project Course */}
+        <div className="flex items-center gap-7">
+          <Link 
+            href="/" 
+            className="flex items-center gap-3 group transition-transform active:scale-[0.99]"
+            title="Vietnamese-German University - Project Course"
+          >
+            <VguIcon 
+              size={36} 
+              className="border border-orange-500/25 bg-orange-500/10 group-hover:border-orange-500/40 group-hover:scale-105 transition-all shadow-xs" 
+            />
+            <span 
+              className="font-extrabold text-sm sm:text-[15px] tracking-tight leading-none group-hover:opacity-90 transition-opacity" 
+              style={{ color: 'var(--text-main)' }}
+            >
+              Project Course
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -82,17 +86,17 @@ export const Navbar: React.FC = () => {
                 <Link
                   key={link.href}
                   href={targetHref}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all ${
                     isActive
-                      ? 'shadow-xs'
-                      : 'hover:opacity-80'
+                      ? 'font-bold shadow-xs'
+                      : 'font-semibold hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
                   }`}
                   style={{
                     backgroundColor: isActive ? 'var(--accent-blue-soft)' : 'transparent',
                     color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)'
                   }}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span>{link.label}</span>
                   {isLocked && <Lock className="w-2.5 h-2.5 opacity-50 ml-0.5" />}
                 </Link>
@@ -107,24 +111,24 @@ export const Navbar: React.FC = () => {
           {/* Supabase Sync Status Indicator */}
           {isSupabase && (
             <div
-              className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold border"
+              className="hidden lg:flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[10px] font-semibold border shadow-xs"
               style={{
                 borderColor: 'var(--border-subtle)',
-                backgroundColor: 'var(--bg-surface)',
+                backgroundColor: 'var(--bg-surface-elevated)',
                 color: 'var(--text-muted)'
               }}
               title={syncStatus === 'synced' ? 'Live Supabase real-time sync active' : 'Syncing data...'}
             >
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`w-1.5 h-1.5 rounded-full ${
                   syncStatus === 'synced'
-                    ? 'bg-emerald-500'
+                    ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
                     : syncStatus === 'syncing'
                     ? 'bg-blue-500 animate-pulse'
                     : 'bg-slate-400'
                 }`}
               />
-              <span className="uppercase tracking-wider text-[9px]">
+              <span className="uppercase tracking-wider text-[9px] font-mono">
                 {syncStatus === 'synced' ? 'Live Sync' : syncStatus === 'syncing' ? 'Syncing' : 'Offline'}
               </span>
             </div>
@@ -132,16 +136,17 @@ export const Navbar: React.FC = () => {
 
           {/* Segmented Theme Switcher */}
           <div 
-            className="flex items-center rounded-full p-0.5 border text-xs font-bold"
+            className="flex items-center h-8 rounded-full p-0.5 border text-xs font-semibold shadow-xs"
             style={{ 
               borderColor: 'var(--border-strong)', 
               backgroundColor: 'var(--bg-surface-elevated)' 
             }}
           >
             <button
+              type="button"
               onClick={() => setTheme('light')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full transition-all ${
-                theme === 'light' ? 'shadow-xs' : 'opacity-60 hover:opacity-100'
+              className={`h-full flex items-center gap-1.5 px-2.5 rounded-full transition-all text-[11px] cursor-pointer ${
+                theme === 'light' ? 'shadow-xs font-bold' : 'opacity-60 hover:opacity-100 font-medium'
               }`}
               style={{
                 backgroundColor: theme === 'light' ? 'var(--bg-surface)' : 'transparent',
@@ -153,9 +158,10 @@ export const Navbar: React.FC = () => {
             </button>
 
             <button
+              type="button"
               onClick={() => setTheme('dark')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full transition-all ${
-                theme === 'dark' ? 'shadow-xs' : 'opacity-60 hover:opacity-100'
+              className={`h-full flex items-center gap-1.5 px-2.5 rounded-full transition-all text-[11px] cursor-pointer ${
+                theme === 'dark' ? 'shadow-xs font-bold' : 'opacity-60 hover:opacity-100 font-medium'
               }`}
               style={{
                 backgroundColor: theme === 'dark' ? '#1c1c24' : 'transparent',
@@ -167,19 +173,36 @@ export const Navbar: React.FC = () => {
             </button>
           </div>
 
+          {/* Quick Backup Action */}
+          <button
+            type="button"
+            onClick={exportData}
+            title="Download JSON backup of all team project data"
+            className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-semibold hover:border-blue-500/40 hover:bg-[var(--bg-surface)] transition-all cursor-pointer shadow-xs"
+            style={{
+              borderColor: 'var(--border-strong)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              color: 'var(--text-main)',
+            }}
+          >
+            <Download className="w-3.5 h-3.5 text-blue-500" />
+            <span>Backup</span>
+          </button>
+
           {/* User Profile or Sign In Button */}
           {user ? (
             <div className="relative" ref={dropdownRef}>
               <button
+                type="button"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl border transition-all hover:shadow-xs cursor-pointer"
+                className="flex items-center gap-2 h-8 pl-1 pr-2.5 rounded-full border transition-all hover:shadow-xs cursor-pointer"
                 style={{
                   borderColor: 'var(--border-subtle)',
-                  backgroundColor: 'var(--bg-surface)',
+                  backgroundColor: 'var(--bg-surface-elevated)',
                 }}
               >
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-xs"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 shadow-xs"
                   style={{ backgroundColor: avatarBg }}
                 >
                   {userInitials}
@@ -287,7 +310,7 @@ export const Navbar: React.FC = () => {
               <div className="relative">
                 <Icon className="w-4 h-4" />
                 {isLocked && (
-                  <span className="absolute -top-1 -right-1.5 text-[8px]">🔒</span>
+                  <Lock className="w-2.5 h-2.5 text-slate-400 absolute -top-1 -right-1.5 opacity-70" />
                 )}
               </div>
               <span className="text-[10px]">{link.label}</span>

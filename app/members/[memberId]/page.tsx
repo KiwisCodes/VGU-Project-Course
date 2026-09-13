@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
-import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus } from '@/types';
+import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus, stripHtml, Member } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TaskTableView } from '@/components/TaskTableView';
+import { NoteTabEditor } from '@/components/NoteTabEditor';
+import { renderAllMermaidDiagrams } from '@/lib/mermaid';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -68,17 +70,21 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     return null;
   }
 
-  const member = members.find(m => m.id === unwrappedParams.memberId);
+  const decodedParam = decodeURIComponent(unwrappedParams.memberId).toLowerCase();
+  const member = members.find(m => 
+    m.id === unwrappedParams.memberId ||
+    m.studentId === unwrappedParams.memberId ||
+    (m.name && m.name.toLowerCase().includes(decodedParam)) ||
+    (m.email && m.email.toLowerCase().includes(decodedParam))
+  );
 
   const [selectedLecture, setSelectedLecture] = useState<number | 'all'>(1);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'done'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Notes state (1 note per lecture per member)
+  // Notes state
   const [activeNoteLecture, setActiveNoteLecture] = useState<number>(1);
-  const [noteContent, setNoteContent] = useState<string>('');
-  const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [notesViewMode, setNotesViewMode] = useState<'my' | 'team'>('my');
 
   // Modal State for Task Create/Edit
@@ -95,13 +101,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     status: 'In Progress' as TaskStatus,
     dueDate: new Date().toISOString().split('T')[0]
   });
-
-  // Keep note content in sync with member, activeNoteLecture, and memberNotes
-  React.useEffect(() => {
-    if (member) {
-      setNoteContent(getMemberLectureNote(member.id, activeNoteLecture));
-    }
-  }, [member, activeNoteLecture, memberNotes]);
 
   // Sync activeNoteLecture when selectedLecture changes (if numeric)
   React.useEffect(() => {
@@ -155,13 +154,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     }
     return true;
   });
-
-  const handleSaveNote = () => {
-    if (!member) return;
-    setMemberLectureNote(member.id, activeNoteLecture, noteContent);
-    setIsSavedNotice(true);
-    setTimeout(() => setIsSavedNotice(false), 2500);
-  };
 
   const openCreateModal = (defaultStatus: TaskStatus = 'In Progress') => {
     setEditingTaskId(null);
@@ -495,14 +487,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                 <span className="pill-badge pill-purple text-[10px]">
                   30% Grade Weight
                 </span>
-                {isSavedNotice && (
-                  <span className="text-xs font-bold text-emerald-500 animate-pulse">
-                    ✓ Saved!
-                  </span>
-                )}
               </div>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                1 note for each lecture session (1 to {TOTAL_LECTURES}) per team member. Document accomplishments, clinical findings, and questions.
+                Multi-tab research notes and Google Docs editor for each lecture session (1 to {TOTAL_LECTURES}). Document technical benchmarks, clinical pipelines, and blockers.
               </p>
             </div>
           </div>
@@ -593,13 +580,13 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
           </div>
         </div>
 
-        {/* View 1: My Personal Note Editor for activeNoteLecture */}
+        {/* View 1: My Personal Note Editor with Multi-Tabs & Google Docs toolbar */}
         {notesViewMode === 'my' ? (
           <div className="space-y-3 pt-1">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold" style={{ color: 'var(--text-main)' }}>
-                  {member.name} - Lecture {activeNoteLecture} Progress Note
+                  {member.name} - Lecture {activeNoteLecture} Progress Notes
                 </span>
                 {member.studentId && (
                   <span className="text-[10px] font-mono text-muted">
@@ -608,57 +595,28 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                {isSavedNotice && (
-                  <span className="text-xs font-bold text-emerald-500 animate-pulse">
-                    ✓ Saved to Project Storage!
-                  </span>
-                )}
-                {canEditNote(member.id) ? (
-                  <button
-                    type="button"
-                    onClick={handleSaveNote}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all cursor-pointer"
-                    style={{ backgroundColor: 'var(--accent-purple)' }}
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Save Lecture {activeNoteLecture} Notes</span>
-                  </button>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                    <span>🔒</span>
-                    <span>Read-Only Log</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <textarea
-              rows={7}
-              value={noteContent}
-              onChange={(e) => canEditNote(member.id) && setNoteContent(e.target.value)}
-              readOnly={!canEditNote(member.id)}
-              placeholder={canEditNote(member.id) ? `Log your accomplishments, technical progress, and blockers for Lecture ${activeNoteLecture}:
-- MultiCaRe dataset extraction and clinical notes normalization
-- Vision-language inference benchmarking (LLaVA / Gemma-2-Vision)
-- RAG vector retrieval experiments and Knowledge Graph construction
-- Multi-agent debate workflow verification
-
-Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logged by ${member.name} for Lecture ${activeNoteLecture} yet.`}
-              className={`w-full p-3.5 rounded-xl text-xs border focus:outline-none focus:ring-1 leading-relaxed font-sans ${!canEditNote(member.id) ? 'opacity-80 bg-slate-50 dark:bg-slate-900/60 cursor-default' : ''}`}
-              style={{
-                backgroundColor: 'var(--bg-surface-elevated)',
-                borderColor: 'var(--border-strong)',
-                color: 'var(--text-main)'
-              }}
-            />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-muted">
-              <span>Automatically indexed under Lecture {activeNoteLecture} for continuous assessment evaluation</span>
               <button
                 type="button"
                 onClick={() => setNotesViewMode('team')}
-                className="font-bold hover:underline cursor-pointer flex items-center gap-1"
+                className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
+                style={{ color: 'var(--accent-blue)' }}
+              >
+                <span>View Team Notes ({members.length}) &rarr;</span>
+              </button>
+            </div>
+
+            <NoteTabEditor
+              memberId={member.id}
+              memberName={member.name}
+              lectureId={activeNoteLecture}
+              readOnly={!canEditNote(member.id)}
+            />
+
+            <div className="flex items-center justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setNotesViewMode('team')}
+                className="text-[11px] font-bold hover:underline cursor-pointer flex items-center gap-1"
                 style={{ color: 'var(--accent-blue)' }}
               >
                 <span>View What Teammates Wrote for Lecture {activeNoteLecture} &rarr;</span>
@@ -666,98 +624,37 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
             </div>
           </div>
         ) : (
-          /* View 2: All 5 Team Members' Notes for activeNoteLecture */
+          /* View 2: All Team Members' Multi-Tab Notes for activeNoteLecture */
           <div className="space-y-3 pt-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold" style={{ color: 'var(--text-main)' }}>
-                All 5 Specialists' Progress Notes for Lecture {activeNoteLecture}
-              </span>
-              <span className="text-[11px] text-muted">
-                Read what each team member logged for this lecture
-              </span>
+              <div>
+                <span className="text-xs font-extrabold block" style={{ color: 'var(--text-main)' }}>
+                  All {members.length} Specialists' Progress Notes for Lecture {activeNoteLecture}
+                </span>
+                <span className="text-[11px] text-muted">
+                  Browse tabs published by team members for continuous assessment review
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotesViewMode('my')}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] cursor-pointer"
+                style={{ color: 'var(--text-main)' }}
+              >
+                Back to My Notes
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {members.map(m => {
-                const note = getMemberLectureNote(m.id, activeNoteLecture);
-                const isMe = m.id === member.id;
-
-                return (
-                  <div
-                    key={m.id}
-                    className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
-                      isMe 
-                        ? 'ring-2 ring-purple-500/40 shadow-xs' 
-                        : 'hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                    style={{
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      borderColor: 'var(--border-subtle)'
-                    }}
-                  >
-                    <div>
-                      {/* Member Header */}
-                      <div className="flex items-center justify-between gap-2 pb-2.5 border-b mb-2.5" style={{ borderColor: 'var(--border-subtle)' }}>
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div
-                            className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-xs"
-                            style={{ backgroundColor: m.avatarBg }}
-                          >
-                            {m.initials}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-xs truncate" style={{ color: 'var(--text-main)' }}>
-                                {m.name}
-                              </span>
-                              {isMe && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-600">
-                                  You
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] font-mono block text-muted">
-                              {m.studentId} • {m.role.split('&')[0].trim()}
-                            </span>
-                          </div>
-                        </div>
-
-                        {isMe && (
-                          <button
-                            type="button"
-                            onClick={() => setNotesViewMode('my')}
-                            className="text-[11px] font-bold text-purple-600 hover:underline cursor-pointer shrink-0"
-                          >
-                            Edit
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Note Content */}
-                      {note.trim() ? (
-                        <p className="text-xs leading-relaxed whitespace-pre-wrap font-normal" style={{ color: 'var(--text-main)' }}>
-                          {note}
-                        </p>
-                      ) : (
-                        <p className="text-xs italic py-4 text-center" style={{ color: 'var(--text-faint)' }}>
-                          No notes recorded for Lecture {activeNoteLecture} yet.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t mt-3 flex items-center justify-between text-[10px] text-muted" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <span>Lecture {activeNoteLecture} Log</span>
-                      <Link
-                        href={`/members/${m.id}`}
-                        className="hover:underline font-bold"
-                        style={{ color: 'var(--accent-blue)' }}
-                      >
-                        Profile &rarr;
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
+              {members.map(m => (
+                <TeammateNoteCard
+                  key={m.id}
+                  member={m}
+                  activeLecture={activeNoteLecture}
+                  isMe={m.id === member.id}
+                  onEdit={() => setNotesViewMode('my')}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -938,6 +835,138 @@ Blockers / Questions for Dr. Tran Duc Khanh & TA Le Viet Tin:` : `No notes logge
         </div>
       )}
 
+    </div>
+  );
+}
+
+function TeammateNoteCard({
+  member,
+  activeLecture,
+  isMe,
+  onEdit
+}: {
+  member: Member;
+  activeLecture: number;
+  isMe: boolean;
+  onEdit: () => void;
+}) {
+  const { getMemberLectureNoteDoc } = useProject();
+  const doc = getMemberLectureNoteDoc(member.id, activeLecture);
+  const [selectedTabId, setSelectedTabId] = useState<string>(doc.activeTabId || (doc.tabs[0]?.id ?? 'tab-1'));
+
+  React.useEffect(() => {
+    if (doc.tabs.length > 0) {
+      setSelectedTabId(doc.activeTabId || doc.tabs[0].id);
+    }
+  }, [doc.activeTabId, activeLecture]);
+
+  const currentTab = doc.tabs.find(t => t.id === selectedTabId) || doc.tabs[0];
+  const hasContent = currentTab && currentTab.content && stripHtml(currentTab.content).trim().length > 0;
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (contentRef.current) {
+      renderAllMermaidDiagrams(contentRef.current);
+    }
+  }, [currentTab?.content, selectedTabId, activeLecture]);
+
+  return (
+    <div
+      className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+        isMe 
+          ? 'ring-2 ring-purple-500/40 shadow-xs' 
+          : 'hover:border-slate-300 dark:hover:border-slate-700'
+      }`}
+      style={{
+        backgroundColor: 'var(--bg-surface-elevated)',
+        borderColor: 'var(--border-subtle)'
+      }}
+    >
+      <div className="space-y-3">
+        {/* Member Header */}
+        <div className="flex items-center justify-between gap-2 pb-2.5 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-xs"
+              style={{ backgroundColor: member.avatarBg }}
+            >
+              {member.initials}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-xs truncate" style={{ color: 'var(--text-main)' }}>
+                  {member.name}
+                </span>
+                {isMe && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-600">
+                    You
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-mono block text-muted">
+                {member.studentId} • {member.role.split('&')[0].trim()}
+              </span>
+            </div>
+          </div>
+
+          {isMe && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-[11px] font-bold text-purple-600 hover:underline cursor-pointer shrink-0"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        {/* Tab Pills for this member */}
+        {doc.tabs.length > 0 && (
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-thin">
+            {doc.tabs.map((tab) => {
+              const isTabActive = tab.id === currentTab?.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedTabId(tab.id)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 transition cursor-pointer ${
+                    isTabActive
+                      ? 'bg-[var(--accent-purple)] text-white shadow-xs'
+                      : 'border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  {tab.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tab Content Preview */}
+        {hasContent ? (
+          <div 
+            ref={contentRef}
+            className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)] leading-relaxed max-h-60 overflow-y-auto editor-content font-normal"
+            dangerouslySetInnerHTML={{ __html: currentTab.content }}
+          />
+        ) : (
+          <div className="p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center text-xs italic text-[var(--text-faint)]">
+            No notes recorded for Lecture {activeLecture} yet.
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2 border-t mt-3 flex items-center justify-between text-[10px] text-muted" style={{ borderColor: 'var(--border-subtle)' }}>
+        <span>{doc.tabs.length} Tabs active</span>
+        <Link
+          href={`/members/${member.id}`}
+          className="hover:underline font-bold"
+          style={{ color: 'var(--accent-blue)' }}
+        >
+          View Portal &rarr;
+        </Link>
+      </div>
     </div>
   );
 }

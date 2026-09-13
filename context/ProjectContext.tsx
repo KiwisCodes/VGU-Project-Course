@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Member, Task, DriveFolder, DriveFile, TaskStatus, getTaskOverallStatus } from '@/types';
+import { Member, Task, DriveFolder, DriveFile, TaskStatus, getTaskOverallStatus, LectureNoteDocument, parseNoteDoc, serializeNoteDoc } from '@/types';
 import { INITIAL_MEMBERS, INITIAL_TASKS, INITIAL_MEMBER_NOTES } from '@/data/initialData';
 import { DRIVE_FOLDERS } from '@/data/driveData';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -28,6 +28,8 @@ interface ProjectContextType {
   setMemberNote: (memberId: string, note: string) => void;
   setMemberLectureNote: (memberId: string, lectureId: number, note: string) => void;
   getMemberLectureNote: (memberId: string, lectureId: number) => string;
+  getMemberLectureNoteDoc: (memberId: string, lectureId: number) => LectureNoteDocument;
+  setMemberLectureNoteDoc: (memberId: string, lectureId: number, doc: LectureNoteDocument) => Promise<void>;
   // Drive System Actions
   addDriveFolder: (folder: Omit<DriveFolder, 'id' | 'files'>) => void;
   updateDriveFolder: (folderId: string, updates: Partial<DriveFolder>) => void;
@@ -612,6 +614,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setMemberLectureNote(memberId, 1, note);
   };
 
+  const getMemberLectureNoteDoc = (memberId: string, lectureId: number): LectureNoteDocument => {
+    const raw = getMemberLectureNote(memberId, lectureId);
+    return parseNoteDoc(raw);
+  };
+
+  const setMemberLectureNoteDoc = async (memberId: string, lectureId: number, doc: LectureNoteDocument) => {
+    const serialized = serializeNoteDoc(doc);
+    await setMemberLectureNote(memberId, lectureId, serialized);
+  };
+
   // --- Drive System Methods ---
   const addDriveFolder = async (folderData: Omit<DriveFolder, 'id' | 'files'>) => {
     const tempId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : folderData.name || `Folder-${Date.now()}`;
@@ -821,6 +833,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setMemberNote,
         setMemberLectureNote,
         getMemberLectureNote,
+        getMemberLectureNoteDoc,
+        setMemberLectureNoteDoc,
         addDriveFolder,
         updateDriveFolder,
         deleteDriveFolder,

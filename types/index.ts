@@ -106,6 +106,90 @@ export interface MemberNote {
   createdAt: string;
 }
 
+export interface NoteTab {
+  id: string;
+  title: string;
+  content: string; // Sanitized rich HTML content
+  updatedAt?: string;
+}
+
+export interface LectureNoteDocument {
+  version: number;
+  activeTabId: string;
+  tabs: NoteTab[];
+}
+
+/**
+ * Dynamic Storage Quota Configuration:
+ * 200 MB total database budget for notes / 4 members = 50 MB per member.
+ * 50 MB / 16 lectures = 3.125 MB -> 3.0 MB (3,145,728 bytes) per lecture session.
+ */
+export const MAX_LECTURE_SESSION_BYTES = 3 * 1024 * 1024; // 3.0 MB per lecture session
+export const MAX_NOTE_TABS_PER_LECTURE = 20; // Dynamic tabs up to 20 per lecture
+export const MAX_NOTE_CHARS_PER_TAB = 100000; // Soft single-tab ceiling (100k chars)
+
+/**
+ * Serializes a LectureNoteDocument into a JSON string suitable for member_notes.content.
+ */
+export function serializeNoteDoc(doc: LectureNoteDocument): string {
+  return JSON.stringify(doc);
+}
+
+/**
+ * Parses member_notes.content.
+ * If the content is valid JSON matching version 2, returns the parsed LectureNoteDocument.
+ * If the content is legacy plain text or empty, wraps it safely into a standard LectureNoteDocument.
+ */
+export function parseNoteDoc(rawContent?: string): LectureNoteDocument {
+  if (!rawContent || !rawContent.trim()) {
+    return {
+      version: 2,
+      activeTabId: 'tab-1',
+      tabs: [
+        {
+          id: 'tab-1',
+          title: 'Main Notes',
+          content: '',
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(rawContent);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+      return {
+        version: parsed.version || 2,
+        activeTabId: parsed.activeTabId || parsed.tabs[0].id,
+        tabs: parsed.tabs
+      };
+    }
+  } catch {
+    // Legacy plain text fallback
+  }
+
+  return {
+    version: 2,
+    activeTabId: 'tab-1',
+    tabs: [
+      {
+        id: 'tab-1',
+        title: 'Main Notes',
+        content: rawContent.includes('<') ? rawContent : `<p>${rawContent.replace(/\n/g, '<br />')}</p>`,
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  };
+}
+
+/**
+ * Strips HTML tags for word count, character count, or plain text previews.
+ */
+export function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export interface LectureSession {
   week: number;
   date: string;
