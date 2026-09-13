@@ -190,6 +190,13 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Checks if a LectureNoteDocument has any non-empty content in any of its tabs.
+ */
+export function hasNoteContent(doc: LectureNoteDocument): boolean {
+  return doc.tabs.some(t => stripHtml(t.content || '').trim().length > 0);
+}
+
 export interface LectureSession {
   week: number;
   date: string;

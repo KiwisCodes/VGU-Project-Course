@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
-import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus, stripHtml, Member } from '@/types';
+import { Task, TaskStatus, Priority, isTaskDoneForMember, getTaskMemberStatus, stripHtml, hasNoteContent, Member } from '@/types';
 import { LectureDial } from '@/components/LectureDial';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { TaskTableView } from '@/components/TaskTableView';
@@ -48,6 +48,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
     setMemberNote, 
     setMemberLectureNote, 
     getMemberLectureNote, 
+    getMemberLectureNoteDoc,
     addTask, 
     updateTask, 
     deleteTask,
@@ -541,8 +542,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ memberI
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {Array.from({ length: TOTAL_LECTURES }, (_, i) => i + 1).map(lec => {
               const isCurrent = activeNoteLecture === lec;
-              const hasMyNote = Boolean(getMemberLectureNote(member.id, lec).trim());
-              const teamNotesCount = members.filter(m => Boolean(getMemberLectureNote(m.id, lec).trim())).length;
+              const hasMyNote = hasNoteContent(getMemberLectureNoteDoc(member.id, lec));
+              const teamNotesCount = members.filter(m => hasNoteContent(getMemberLectureNoteDoc(m.id, lec))).length;
 
               return (
                 <button
